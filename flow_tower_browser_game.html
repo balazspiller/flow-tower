@@ -301,6 +301,8 @@
   const SLOW_TIME_DURATION = 5;
   const SLOW_TIME_SCALE = .46;
   const POWERUP_CHANCE = .035;
+  const SPRING_POWERUP_CHANCE = .018;
+  const SPRING_LAUNCH_SPEED = 1650;
   const MILESTONE_HEIGHT_STEP = 200;
 
   const audio = {
@@ -334,6 +336,11 @@
     power() {
       this.tone(540, .08, 'triangle', .04);
       setTimeout(() => this.tone(810, .1, 'sine', .035), 55);
+    },
+    spring() {
+      this.tone(360, .055, 'triangle', .04);
+      setTimeout(() => this.tone(720, .075, 'triangle', .038), 45);
+      setTimeout(() => this.tone(1080, .09, 'sine', .034), 95);
     },
     fail() { this.tone(80, .28, 'sawtooth', .04); }
   };
@@ -395,6 +402,13 @@
     };
   }
 
+  function randomPowerUp(kind) {
+    if (kind === 'boost') return false;
+    if (Math.random() < SPRING_POWERUP_CHANCE) return 'spring';
+    if (Math.random() < POWERUP_CHANCE) return 'slow';
+    return false;
+  }
+
   function addMilestonesDownTo(id, yLimit) {
     while (-state.nextMilestoneHeight * 10 >= yLimit) {
       const height = state.nextMilestoneHeight;
@@ -437,7 +451,7 @@
       const margin = 26;
       const x = side % 3 === 0 ? rand(margin, W * .35) : side % 3 === 1 ? rand(W * .45, W - pw - margin) : rand(margin, W - pw - margin);
       const kind = Math.random() < .08 ? 'boost' : 'normal';
-      const powerUp = kind !== 'boost' && Math.random() < POWERUP_CHANCE;
+      const powerUp = randomPowerUp(kind);
       state.platforms.push(platform(id++, x, y, pw, kind, powerUp));
       y -= rand(58 + difficulty * 12, 94 + difficulty * 22);
       id = addMilestonesDownTo(id, y);
@@ -476,7 +490,7 @@
       if (Math.random() < .05 + difficulty * .04) kind = 'thin';
       if (Math.random() < .07) kind = 'boost';
 
-      const powerUp = kind !== 'boost' && Math.random() < POWERUP_CHANCE;
+      const powerUp = randomPowerUp(kind);
       state.platforms.push(platform(id++, x, y, kind === 'thin' ? pw * .7 : pw, kind, powerUp));
       y -= gap;
       id = addMilestonesDownTo(id, y);
@@ -514,6 +528,22 @@
     audio.power();
   }
 
+  function activateSpring(x, y) {
+    const p = state.player;
+    p.vy = -SPRING_LAUNCH_SPEED;
+    p.grounded = false;
+    p.coyote = 0;
+    p.jumpBuffer = 0;
+    p.squash = -.48;
+    p.flip = 1;
+    p.flipSpeed = 2.5;
+    p.flipDir = Math.sign(p.vx || p.facing || 1);
+    state.cameraStarted = true;
+    state.shake = Math.max(state.shake, .45);
+    burst(x, y, 58, 'spring');
+    audio.spring();
+  }
+
   function checkPowerUps() {
     const p = state.player;
     for (const plat of state.platforms) {
@@ -524,8 +554,10 @@
       const overlapsX = Math.abs(p.x - px) < p.w / 2 + 18;
       const overlapsY = Math.abs(p.y - py) < p.h / 2 + 18;
       if (overlapsX && overlapsY) {
+        const powerUp = plat.powerUp;
         plat.powerUp = false;
-        activateSlowTime(px, screenY(py));
+        if (powerUp === 'spring') activateSpring(px, screenY(py));
+        else activateSlowTime(px, screenY(py));
         break;
       }
     }
@@ -534,14 +566,14 @@
   function burst(x, y, n, type = 'dust') {
     for (let i = 0; i < n; i++) {
       const a = rand(0, Math.PI * 2);
-      const sp = type === 'flow' ? rand(90, 380) : rand(40, 170);
+      const sp = type === 'flow' || type === 'spring' ? rand(90, 380) : rand(40, 170);
       state.particles.push({
         x, y,
         vx: Math.cos(a) * sp,
-        vy: Math.sin(a) * sp - rand(10, 90),
-        life: type === 'flow' ? rand(.35, .8) : rand(.18, .45),
-        maxLife: type === 'flow' ? .8 : .45,
-        size: type === 'flow' ? rand(2, 6) : rand(1, 4),
+        vy: type === 'spring' ? -rand(160, 520) - Math.abs(Math.sin(a)) * sp : Math.sin(a) * sp - rand(10, 90),
+        life: type === 'flow' || type === 'spring' ? rand(.35, .8) : rand(.18, .45),
+        maxLife: type === 'flow' || type === 'spring' ? .8 : .45,
+        size: type === 'flow' || type === 'spring' ? rand(2, 6) : rand(1, 4),
         type
       });
     }
@@ -932,12 +964,13 @@
 
       const pulse = (Math.sin(state.time * 5 + plat.id) + 1) / 2;
       const r = 15 + pulse * 1.6;
+      const isSpring = plat.powerUp === 'spring';
 
       ctx.save();
-      ctx.shadowColor = 'rgba(138,232,255,.9)';
+      ctx.shadowColor = isSpring ? 'rgba(255,224,138,.92)' : 'rgba(138,232,255,.9)';
       ctx.shadowBlur = 18 + pulse * 12;
 
-      ctx.fillStyle = 'rgba(138,232,255,.95)';
+      ctx.fillStyle = isSpring ? 'rgba(255,224,138,.95)' : 'rgba(138,232,255,.95)';
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
@@ -948,25 +981,36 @@
       ctx.fill();
 
       ctx.fillStyle = 'rgba(238,252,255,.96)';
-      ctx.beginPath();
-      ctx.moveTo(x - 7, y - 8);
-      ctx.lineTo(x + 7, y - 8);
-      ctx.lineTo(x + 2.5, y - 2);
-      ctx.lineTo(x + 2.5, y + 2);
-      ctx.lineTo(x + 7, y + 8);
-      ctx.lineTo(x - 7, y + 8);
-      ctx.lineTo(x - 2.5, y + 2);
-      ctx.lineTo(x - 2.5, y - 2);
-      ctx.closePath();
-      ctx.fill();
+      if (isSpring) {
+        for (const offset of [-6, 4]) {
+          ctx.beginPath();
+          ctx.moveTo(x, y + offset - 8);
+          ctx.lineTo(x + 8, y + offset + 6);
+          ctx.lineTo(x - 8, y + offset + 6);
+          ctx.closePath();
+          ctx.fill();
+        }
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(x - 7, y - 8);
+        ctx.lineTo(x + 7, y - 8);
+        ctx.lineTo(x + 2.5, y - 2);
+        ctx.lineTo(x + 2.5, y + 2);
+        ctx.lineTo(x + 7, y + 8);
+        ctx.lineTo(x - 7, y + 8);
+        ctx.lineTo(x - 2.5, y + 2);
+        ctx.lineTo(x - 2.5, y - 2);
+        ctx.closePath();
+        ctx.fill();
 
-      ctx.fillStyle = 'rgba(138,232,255,.9)';
-      ctx.beginPath();
-      ctx.moveTo(x - 4, y - 5);
-      ctx.lineTo(x + 4, y - 5);
-      ctx.lineTo(x, y - 1);
-      ctx.closePath();
-      ctx.fill();
+        ctx.fillStyle = 'rgba(138,232,255,.9)';
+        ctx.beginPath();
+        ctx.moveTo(x - 4, y - 5);
+        ctx.lineTo(x + 4, y - 5);
+        ctx.lineTo(x, y - 1);
+        ctx.closePath();
+        ctx.fill();
+      }
 
       ctx.strokeStyle = `rgba(255,255,255,${.36 + pulse * .3})`;
       ctx.lineWidth = 2;
@@ -1042,11 +1086,11 @@
   function drawParticles(foreground) {
     for (const part of state.particles) {
       const y = part.y;
-      if (foreground !== (part.type === 'flow')) continue;
+      if (foreground !== (part.type === 'flow' || part.type === 'spring')) continue;
       const a = clamp(part.life / part.maxLife, 0, 1);
       ctx.save();
       ctx.globalAlpha = a;
-      ctx.fillStyle = part.type === 'flow' ? 'rgba(255,224,138,.95)' : part.type === 'slow' ? 'rgba(138,232,255,.9)' : 'rgba(220,235,255,.62)';
+      ctx.fillStyle = part.type === 'flow' || part.type === 'spring' ? 'rgba(255,224,138,.95)' : part.type === 'slow' ? 'rgba(138,232,255,.9)' : 'rgba(220,235,255,.62)';
       ctx.beginPath();
       ctx.arc(part.x, part.y, part.size * a, 0, Math.PI * 2);
       ctx.fill();
