@@ -263,7 +263,7 @@
         <ul class="tips">
           <li>Horizontal speed increases jump power and lets you skip floors.</li>
           <li>Landing on higher platforms quickly keeps the combo alive.</li>
-          <li>At combo x5+, the tower enters flow: trails, speed lines, stronger sound, and extra jump assist. At x20+, jumps get extra hang time and overdrive effects.</li>
+          <li>At combo x5+, the tower enters flow: trails, speed lines, stronger sound, and extra jump assist. At x20+, jumps get extra hang time, mild slow time, and overdrive effects.</li>
           <li>Rare blue hourglasses appear on some platforms and slow time for 5 seconds.</li>
           <li>Perfect-ish landings preserve momentum better than hard landings.</li>
         </ul>
@@ -301,6 +301,7 @@
   const GRAVITY = 1720;
   const SLOW_TIME_DURATION = 5;
   const SLOW_TIME_SCALE = .46;
+  const OVERDRIVE_TIME_SCALE = .84;
   const POWERUP_CHANCE = .035;
   const SPRING_POWERUP_CHANCE = .018;
   const SPRING_LAUNCH_SPEED = 1650;
@@ -510,7 +511,7 @@
     state.comboTimer = 1.35;
     state.score += 50 * state.combo;
     const overdrive = comboOverdrive();
-    state.shake = Math.min(1.35, .08 + state.combo * .018 + overdrive * .32);
+    state.shake = Math.min(.82, .07 + state.combo * .012 + overdrive * .12);
     audio.land(state.combo);
 
     if (state.combo >= FLOW_COMBO_THRESHOLD && previousCombo < FLOW_COMBO_THRESHOLD) {
@@ -639,7 +640,9 @@
   function update(rawDt) {
     if (state.mode !== 'playing' || state.pause) return;
     state.slowTime = Math.max(0, state.slowTime - rawDt);
-    const timeScale = state.slowTime > 0 ? SLOW_TIME_SCALE : 1;
+    const overdrive = comboOverdrive();
+    const overdriveTimeScale = lerp(1, OVERDRIVE_TIME_SCALE, overdrive);
+    const timeScale = (state.slowTime > 0 ? SLOW_TIME_SCALE : 1) * overdriveTimeScale;
     const dt = rawDt * timeScale;
     state.time += dt;
     state.slowPulse = lerp(state.slowPulse, state.slowTime > 0 ? .72 : 0, 1 - Math.pow(.002, rawDt));
@@ -655,7 +658,6 @@
     const absVX = Math.abs(p.vx);
     const speedRatio = clamp(absVX / 440, 0, 1);
     const flowAssist = clamp(state.combo / 10, 0, 1);
-    const overdrive = comboOverdrive();
 
     const accel = p.grounded ? 1780 : 1180;
     const friction = p.grounded ? 1320 : 130;
@@ -681,7 +683,7 @@
       p.coyote = 0;
       p.jumpBuffer = 0;
       p.squash = -.35;
-      state.shake = Math.max(state.shake, .05 + speedRatio * .05 + overdrive * .18);
+      state.shake = Math.max(state.shake, .04 + speedRatio * .035 + overdrive * .07);
       audio.jump(speedRatio);
 
       // Purely visual trick animation: higher combos make flip jumps more likely.
@@ -772,7 +774,7 @@
       state.cameraY = lerp(state.cameraY, state.cameraTargetY, 1 - Math.pow(.02, dt));
     }
 
-    state.shake = Math.max(0, state.shake - dt * (1.8 - comboOverdrive() * .45));
+    state.shake = Math.max(0, state.shake - dt * (2.1 - comboOverdrive() * .2));
 
     const trailRate = comboOverdrive() > 0 ? .022 : .04;
     if (state.flow > .15 && state.time % trailRate < dt) {
@@ -816,8 +818,8 @@
   }
 
   function draw() {
-    const shakeX = state.shake ? rand(-state.shake, state.shake) * 12 : 0;
-    const shakeY = state.shake ? rand(-state.shake, state.shake) * 12 : 0;
+    const shakeX = state.shake ? rand(-state.shake, state.shake) * 8 : 0;
+    const shakeY = state.shake ? rand(-state.shake, state.shake) * 8 : 0;
 
     ctx.save();
     ctx.translate(shakeX, shakeY);
