@@ -1,0 +1,1141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Flow Tower</title>
+<style>
+  :root {
+    --bg: #080b14;
+    --panel: rgba(255,255,255,.08);
+    --text: #eef4ff;
+    --muted: rgba(238,244,255,.68);
+    --accent: #8ae8ff;
+    --hot: #ffe08a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background:
+      radial-gradient(circle at 50% 8%, rgba(95, 150, 255, .18), transparent 28rem),
+      linear-gradient(180deg, #0a1020, #05070d 70%);
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  .shell {
+    display: grid;
+    grid-template-columns: minmax(320px, 480px) minmax(240px, 340px);
+    gap: 22px;
+    align-items: center;
+    padding: 24px;
+  }
+
+  .game-wrap {
+    position: relative;
+    width: min(92vw, 480px);
+    aspect-ratio: 2 / 3;
+    border-radius: 28px;
+    overflow: hidden;
+    box-shadow: 0 28px 90px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.1);
+    background: #070a12;
+  }
+
+  canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    image-rendering: auto;
+  }
+
+  .hud {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    padding: 18px;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: flex-start;
+    text-shadow: 0 2px 10px rgba(0,0,0,.5);
+  }
+
+  .hud-card {
+    background: rgba(0,0,0,.24);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 18px;
+    padding: 10px 12px;
+    backdrop-filter: blur(12px);
+  }
+
+  .big {
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -.04em;
+  }
+
+  .label {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  .combo {
+    text-align: right;
+    transition: transform .12s ease;
+  }
+
+  .combo.hot { transform: scale(1.08); }
+  .combo .big { color: var(--hot); }
+
+  .power {
+    justify-self: center;
+    text-align: right;
+    border-color: rgba(138,232,255,.32);
+    box-shadow: 0 0 26px rgba(138,232,255,.16);
+    min-width: 116px;
+  }
+
+  .power.hidden { visibility: hidden; }
+
+  .power-bar {
+    width: 92px;
+    height: 10px;
+    margin-left: auto;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.16);
+  }
+
+  .power-bar-fill {
+    width: 100%;
+    height: 100%;
+    transform-origin: left center;
+    background: linear-gradient(90deg, #8ae8ff, #effcff);
+    box-shadow: 0 0 16px rgba(138,232,255,.65);
+  }
+
+  .combo { justify-self: end; }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 28px;
+    background: radial-gradient(circle at 50% 35%, rgba(22,32,59,.84), rgba(4,7,14,.92));
+    text-align: center;
+  }
+
+  .overlay.hidden { display: none; }
+
+  h1 {
+    margin: 0 0 8px;
+    font-size: clamp(36px, 7vw, 58px);
+    line-height: .92;
+    letter-spacing: -.07em;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    max-width: 32rem;
+    margin: 0 auto 22px;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+
+  button {
+    pointer-events: auto;
+    border: 0;
+    border-radius: 999px;
+    padding: 13px 20px;
+    font: inherit;
+    font-weight: 750;
+    cursor: pointer;
+    color: #071018;
+    background: linear-gradient(180deg, #effcff, #8ae8ff);
+    box-shadow: 0 12px 32px rgba(138,232,255,.28);
+  }
+
+  button:active { transform: translateY(1px); }
+
+  .side {
+    color: var(--muted);
+    line-height: 1.5;
+    font-size: 15px;
+  }
+
+  .side h2 {
+    color: var(--text);
+    margin: 0 0 10px;
+    font-size: 22px;
+    letter-spacing: -.03em;
+  }
+
+  .side-card {
+    background: var(--panel);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 24px;
+    padding: 18px;
+    margin-bottom: 14px;
+    box-shadow: 0 18px 60px rgba(0,0,0,.18);
+    backdrop-filter: blur(12px);
+  }
+
+  kbd {
+    display: inline-block;
+    min-width: 1.8em;
+    padding: 2px 7px;
+    border-radius: 8px;
+    background: rgba(255,255,255,.12);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,.12);
+    font-size: 13px;
+    text-align: center;
+  }
+
+  .tips { margin: 0; padding-left: 18px; }
+  .tips li { margin: 7px 0; }
+
+  @media (max-width: 860px) {
+    body { overflow: auto; }
+    .shell { grid-template-columns: 1fr; padding: 14px; }
+    .game-wrap { margin: 0 auto; }
+    .side { width: min(92vw, 480px); margin: 0 auto; }
+  }
+</style>
+</head>
+<body>
+  <main class="shell">
+    <section class="game-wrap" aria-label="Flow Tower game">
+      <canvas id="game" width="480" height="720"></canvas>
+
+      <div class="hud">
+        <div class="hud-card">
+          <div class="big" id="heightText">0</div>
+          <div class="label">height</div>
+        </div>
+        <div class="hud-card power hidden" id="powerCard">
+          <div class="power-bar" aria-hidden="true">
+            <div class="power-bar-fill" id="powerFill"></div>
+          </div>
+          <div class="label">slow time</div>
+        </div>
+        <div class="hud-card combo" id="comboCard">
+          <div class="big" id="comboText">x0</div>
+          <div class="label">combo</div>
+        </div>
+      </div>
+
+      <div class="overlay" id="startOverlay">
+        <div>
+          <h1>Flow<br>Tower</h1>
+          <p class="subtitle">Build speed, chain platform jumps, and stay ahead of the rising camera. Long combo streaks unlock the flow effect.</p>
+          <button id="startButton">Start climbing</button>
+        </div>
+      </div>
+
+      <div class="overlay hidden" id="gameOverOverlay">
+        <div>
+          <h1>Fallout</h1>
+          <p class="subtitle" id="resultText">Height: 0 · Best combo: 0</p>
+          <button id="restartButton">Restart</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="side-card">
+        <h2>Controls</h2>
+        <p><kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> move · <kbd>Space</kbd>/<kbd>↑</kbd> jump · <kbd>Space</kbd> start/restart · <kbd>R</kbd> restart after a fall · <kbd>P</kbd> pause</p>
+      </div>
+      <div class="side-card">
+        <h2>Flow system</h2>
+        <ul class="tips">
+          <li>Horizontal speed increases jump power and lets you skip floors.</li>
+          <li>Landing on higher platforms quickly keeps the combo alive.</li>
+          <li>At combo x5+, the tower enters flow: trails, speed lines, stronger sound, and extra jump assist.</li>
+          <li>Rare blue hourglasses appear on some platforms and slow time for 5 seconds.</li>
+          <li>Perfect-ish landings preserve momentum better than hard landings.</li>
+        </ul>
+      </div>
+    </aside>
+  </main>
+
+<script>
+(() => {
+  'use strict';
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+
+  const heightText = document.getElementById('heightText');
+  const comboText = document.getElementById('comboText');
+  const comboCard = document.getElementById('comboCard');
+  const powerFill = document.getElementById('powerFill');
+  const powerCard = document.getElementById('powerCard');
+  const startOverlay = document.getElementById('startOverlay');
+  const gameOverOverlay = document.getElementById('gameOverOverlay');
+  const resultText = document.getElementById('resultText');
+  const startButton = document.getElementById('startButton');
+  const restartButton = document.getElementById('restartButton');
+
+  const keys = new Set();
+  const rand = (min, max) => min + Math.random() * (max - min);
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const FLOW_COMBO_THRESHOLD = 5;
+  const JUMP_SPEED = 620;
+  const GRAVITY = 1720;
+  const SLOW_TIME_DURATION = 5;
+  const SLOW_TIME_SCALE = .46;
+  const POWERUP_CHANCE = .035;
+  const MILESTONE_HEIGHT_STEP = 200;
+
+  const audio = {
+    ctx: null,
+    enabled: false,
+    init() {
+      if (this.ctx) return;
+      try {
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this.enabled = true;
+      } catch (_) {
+        this.enabled = false;
+      }
+    },
+    tone(freq, duration = .06, type = 'sine', gain = .045) {
+      if (!this.enabled || !this.ctx) return;
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const amp = this.ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t);
+      amp.gain.setValueAtTime(0.0001, t);
+      amp.gain.exponentialRampToValueAtTime(gain, t + .012);
+      amp.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+      osc.connect(amp).connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + duration + .02);
+    },
+    jump(power) { this.tone(170 + power * 180, .055, 'triangle', .035); },
+    land(combo) { this.tone(220 + combo * 28, .07, combo >= FLOW_COMBO_THRESHOLD ? 'square' : 'sine', combo >= FLOW_COMBO_THRESHOLD ? .055 : .035); },
+    power() {
+      this.tone(540, .08, 'triangle', .04);
+      setTimeout(() => this.tone(810, .1, 'sine', .035), 55);
+    },
+    fail() { this.tone(80, .28, 'sawtooth', .04); }
+  };
+
+  const state = {
+    mode: 'menu',
+    time: 0,
+    cameraY: -H,
+    cameraTargetY: -H,
+    cameraStarted: false,
+    scrollSpeed: 48,
+    maxHeight: 0,
+    score: 0,
+    bestCombo: 0,
+    combo: 0,
+    comboTimer: 0,
+    flow: 0,
+    slowTime: 0,
+    slowPulse: 0,
+    shake: 0,
+    pause: false,
+    platformCursorY: 0,
+    nextMilestoneHeight: MILESTONE_HEIGHT_STEP,
+    platforms: [],
+    particles: [],
+    afterImages: [],
+    player: null
+  };
+
+  function makePlayer() {
+    return {
+      x: W / 2,
+      y: -48,
+      w: 30,
+      h: 42,
+      vx: 0,
+      vy: 0,
+      grounded: false,
+      lastPlatformId: null,
+      coyote: 0,
+      jumpBuffer: 0,
+      facing: 1,
+      squash: 0,
+      huePulse: 0,
+      flip: 0,
+      flipSpeed: 0,
+      flipDir: 1
+    };
+  }
+
+  function platform(id, x, y, w, kind = 'normal', powerUp = false, milestoneHeight = null) {
+    return {
+      id, x, y, w,
+      h: kind === 'milestone' ? 18 : 14,
+      kind,
+      touched: false,
+      powerUp,
+      milestoneHeight
+    };
+  }
+
+  function addMilestonesDownTo(id, yLimit) {
+    while (-state.nextMilestoneHeight * 10 >= yLimit) {
+      const height = state.nextMilestoneHeight;
+      state.platforms.push(platform(id++, 0, -height * 10, W, 'milestone', false, height));
+      state.nextMilestoneHeight += MILESTONE_HEIGHT_STEP;
+    }
+    return id;
+  }
+
+  function resetGame() {
+    state.time = 0;
+    state.cameraY = -H;
+    state.cameraTargetY = -H;
+    state.cameraStarted = false;
+    state.scrollSpeed = 48;
+    state.maxHeight = 0;
+    state.score = 0;
+    state.bestCombo = 0;
+    state.combo = 0;
+    state.comboTimer = 0;
+    state.flow = 0;
+    state.slowTime = 0;
+    state.slowPulse = 0;
+    state.shake = 0;
+    state.pause = false;
+    state.platforms = [];
+    state.nextMilestoneHeight = MILESTONE_HEIGHT_STEP;
+    state.particles = [];
+    state.afterImages = [];
+    state.player = makePlayer();
+
+    let id = 1;
+    state.platforms.push(platform(id++, 0, 0, W, 'start'));
+    state.platformCursorY = 0;
+    let y = -90;
+    let side = 0;
+    while (y > -3600) {
+      const difficulty = clamp(Math.abs(y) / 5200, 0, 1);
+      const pw = rand(130 - difficulty * 38, 225 - difficulty * 64);
+      const margin = 26;
+      const x = side % 3 === 0 ? rand(margin, W * .35) : side % 3 === 1 ? rand(W * .45, W - pw - margin) : rand(margin, W - pw - margin);
+      const kind = Math.random() < .08 ? 'boost' : 'normal';
+      const powerUp = kind !== 'boost' && Math.random() < POWERUP_CHANCE;
+      state.platforms.push(platform(id++, x, y, pw, kind, powerUp));
+      y -= rand(58 + difficulty * 12, 94 + difficulty * 22);
+      id = addMilestonesDownTo(id, y);
+      side++;
+    }
+    state.platformCursorY = y;
+    state.mode = 'playing';
+    startOverlay.classList.add('hidden');
+    gameOverOverlay.classList.add('hidden');
+    powerCard.classList.add('hidden');
+  }
+
+  function generatePlatforms() {
+    let id = state.platforms.length ? state.platforms[state.platforms.length - 1].id + 1 : 1;
+    const topNeeded = state.cameraY - H * 1.7;
+    let y = state.platformCursorY;
+    let guard = 0;
+    while (y > topNeeded && guard++ < 80) {
+      const height = Math.abs(y);
+      const difficulty = clamp(height / 7600, 0, 1);
+      const comboBias = clamp(state.combo / 12, 0, 1);
+      const pw = rand(112 - difficulty * 28, 205 - difficulty * 52);
+      const gap = rand(60 + difficulty * 18 + comboBias * 5, 96 + difficulty * 32 + comboBias * 8);
+      const margin = 22;
+      const previous = state.platforms[state.platforms.length - 1];
+      let x;
+      if (previous && Math.random() < .72) {
+        const direction = previous.x + previous.w / 2 < W / 2 ? 1 : -1;
+        x = previous.x + direction * rand(82, 190 + difficulty * 38);
+      } else {
+        x = rand(margin, W - pw - margin);
+      }
+      x = clamp(x, margin, W - pw - margin);
+
+      let kind = 'normal';
+      if (Math.random() < .05 + difficulty * .04) kind = 'thin';
+      if (Math.random() < .07) kind = 'boost';
+
+      const powerUp = kind !== 'boost' && Math.random() < POWERUP_CHANCE;
+      state.platforms.push(platform(id++, x, y, kind === 'thin' ? pw * .7 : pw, kind, powerUp));
+      y -= gap;
+      id = addMilestonesDownTo(id, y);
+    }
+    state.platformCursorY = y;
+
+    const bottomLimit = state.cameraY + H * 1.25;
+    state.platforms = state.platforms.filter(p => p.y < bottomLimit);
+  }
+
+  function startCombo(platformY) {
+    const previousCombo = state.combo;
+    state.combo += 1;
+    state.bestCombo = Math.max(state.bestCombo, state.combo);
+    state.comboTimer = 1.35;
+    state.score += 50 * state.combo;
+    state.shake = Math.min(.9, .08 + state.combo * .018);
+    audio.land(state.combo);
+
+    if (state.combo >= FLOW_COMBO_THRESHOLD && previousCombo < FLOW_COMBO_THRESHOLD) {
+      burst(W / 2, screenY(platformY), 42, 'flow');
+    }
+  }
+
+  function breakCombo() {
+    state.combo = 0;
+    state.comboTimer = 0;
+  }
+
+  function activateSlowTime(x, y) {
+    state.slowTime = SLOW_TIME_DURATION;
+    state.slowPulse = 1;
+    state.shake = Math.max(state.shake, .18);
+    burst(x, y, 46, 'slow');
+    audio.power();
+  }
+
+  function checkPowerUps() {
+    const p = state.player;
+    for (const plat of state.platforms) {
+      if (!plat.powerUp) continue;
+
+      const px = plat.x + plat.w / 2;
+      const py = plat.y - 26;
+      const overlapsX = Math.abs(p.x - px) < p.w / 2 + 18;
+      const overlapsY = Math.abs(p.y - py) < p.h / 2 + 18;
+      if (overlapsX && overlapsY) {
+        plat.powerUp = false;
+        activateSlowTime(px, screenY(py));
+        break;
+      }
+    }
+  }
+
+  function burst(x, y, n, type = 'dust') {
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, Math.PI * 2);
+      const sp = type === 'flow' ? rand(90, 380) : rand(40, 170);
+      state.particles.push({
+        x, y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - rand(10, 90),
+        life: type === 'flow' ? rand(.35, .8) : rand(.18, .45),
+        maxLife: type === 'flow' ? .8 : .45,
+        size: type === 'flow' ? rand(2, 6) : rand(1, 4),
+        type
+      });
+    }
+  }
+
+  function screenY(worldY) {
+    return worldY - state.cameraY;
+  }
+
+  function jumpPreviewTarget() {
+    const p = state.player;
+    if (!p || state.mode !== 'playing' || state.combo < FLOW_COMBO_THRESHOLD) return null;
+
+    const speedRatio = clamp(Math.abs(p.vx) / 440, 0, 1);
+    const flowAssist = clamp(state.combo / 10, 0, 1);
+    const jumpVelocity = JUMP_SPEED * (1 + speedRatio * .55 + flowAssist * .18);
+    const upwardVelocity = (p.grounded || p.coyote > 0) ? jumpVelocity : p.vy < 0 ? -p.vy : 0;
+    if (upwardVelocity <= 0) return null;
+
+    const peakY = p.y - upwardVelocity * upwardVelocity / (2 * GRAVITY);
+    let best = null;
+    let closestDistance = Infinity;
+
+    for (const plat of state.platforms) {
+      if (plat.id === p.lastPlatformId || plat.kind === 'start') continue;
+      if (plat.y < peakY || plat.y >= p.y - 8) continue;
+
+      const dy = plat.y - peakY;
+      if (dy < closestDistance) {
+        closestDistance = dy;
+        best = { targetY: plat.y };
+      }
+    }
+
+    return best;
+  }
+
+  function update(rawDt) {
+    if (state.mode !== 'playing' || state.pause) return;
+    state.slowTime = Math.max(0, state.slowTime - rawDt);
+    const timeScale = state.slowTime > 0 ? SLOW_TIME_SCALE : 1;
+    const dt = rawDt * timeScale;
+    state.time += dt;
+    state.slowPulse = lerp(state.slowPulse, state.slowTime > 0 ? .72 : 0, 1 - Math.pow(.002, rawDt));
+
+    const p = state.player;
+    p.jumpBuffer = Math.max(0, p.jumpBuffer - dt);
+    p.coyote = Math.max(0, p.coyote - dt);
+
+    const left = keys.has('ArrowLeft') || keys.has('a') || keys.has('A');
+    const right = keys.has('ArrowRight') || keys.has('d') || keys.has('D');
+    const input = (right ? 1 : 0) - (left ? 1 : 0);
+
+    const absVX = Math.abs(p.vx);
+    const speedRatio = clamp(absVX / 440, 0, 1);
+    const flowAssist = clamp(state.combo / 10, 0, 1);
+
+    const accel = p.grounded ? 1780 : 1180;
+    const friction = p.grounded ? 1320 : 130;
+    const maxSpeed = 360 + state.flow * 110;
+    const gravity = GRAVITY;
+
+    if (input) {
+      p.vx += input * accel * dt;
+      p.facing = input;
+    } else {
+      const f = friction * dt;
+      if (Math.abs(p.vx) <= f) p.vx = 0;
+      else p.vx -= Math.sign(p.vx) * f;
+    }
+
+    p.vx = clamp(p.vx, -maxSpeed, maxSpeed);
+    p.vy += gravity * dt;
+
+    if (p.jumpBuffer > 0 && (p.grounded || p.coyote > 0)) {
+      const jumpBoost = 1 + speedRatio * .55 + flowAssist * .18;
+      p.vy = -JUMP_SPEED * jumpBoost;
+      p.grounded = false;
+      p.coyote = 0;
+      p.jumpBuffer = 0;
+      p.squash = -.35;
+      state.shake = Math.max(state.shake, .05 + speedRatio * .05);
+      audio.jump(speedRatio);
+
+      // Purely visual trick animation: higher combos make flip jumps more likely.
+      if (state.combo >= FLOW_COMBO_THRESHOLD && p.flip <= 0) {
+        const flipChance = clamp((state.combo - 4) * 0.075, 0, 0.62);
+        if (Math.random() < flipChance) {
+          p.flip = 1;
+          p.flipSpeed = rand(1.65, 2.25) * (1 + clamp(state.combo / 28, 0, .28));
+          p.flipDir = Math.sign(p.vx || p.facing || 1);
+          burst(p.x, screenY(p.y + p.h / 2), 18 + Math.floor(speedRatio * 10), 'flow');
+        }
+      }
+
+      burst(p.x, screenY(p.y + p.h / 2), 12 + Math.floor(speedRatio * 12), 'dust');
+    }
+
+    const oldY = p.y;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    if (p.x < -p.w / 2) p.x = W + p.w / 2;
+    if (p.x > W + p.w / 2) p.x = -p.w / 2;
+
+    p.grounded = false;
+    checkPowerUps();
+
+    if (p.vy >= 0) {
+      for (const plat of state.platforms) {
+        const wasAbove = oldY + p.h / 2 <= plat.y + 4;
+        const nowBelow = p.y + p.h / 2 >= plat.y;
+        const overlaps = p.x + p.w / 2 > plat.x && p.x - p.w / 2 < plat.x + plat.w;
+        if (wasAbove && nowBelow && overlaps && p.y + p.h / 2 < plat.y + 28) {
+          p.y = plat.y - p.h / 2;
+          const hardLanding = clamp(p.vy / 900, 0, 1);
+          p.vy = 0;
+          p.grounded = true;
+          p.coyote = .08;
+          p.squash = .34 + hardLanding * .18;
+
+          const center = plat.x + plat.w / 2;
+          const landingQuality = 1 - clamp(Math.abs(p.x - center) / (plat.w * .72), 0, 1);
+          p.vx *= lerp(.78, 1.04, landingQuality);
+
+          if (plat.kind === 'boost') {
+            p.vx += Math.sign(p.vx || p.facing) * 80;
+            p.vy = -170;
+            burst(p.x, screenY(plat.y), 26, 'flow');
+          }
+
+          if (plat.id !== p.lastPlatformId) {
+            if (!state.cameraStarted && plat.kind !== 'start') state.cameraStarted = true;
+            const climbing = plat.y < (state.maxHeight ? -state.maxHeight + 12 : 99999);
+            if (climbing || state.comboTimer > 0) startCombo(plat.y);
+            else breakCombo();
+            p.lastPlatformId = plat.id;
+            plat.touched = true;
+          }
+          break;
+        }
+      }
+    }
+
+    if (p.grounded) p.coyote = .09;
+
+    if (state.comboTimer > 0) {
+      state.comboTimer -= dt;
+      if (state.comboTimer <= 0) breakCombo();
+    }
+
+    state.flow = lerp(state.flow, state.combo >= FLOW_COMBO_THRESHOLD ? clamp((state.combo - 4) / 8, 0, 1) : 0, 1 - Math.pow(.001, dt));
+    p.squash = lerp(p.squash, 0, 1 - Math.pow(.001, dt));
+    p.huePulse = lerp(p.huePulse, state.flow, .08);
+    if (p.flip > 0) {
+      p.flip = Math.max(0, p.flip - dt * p.flipSpeed);
+    }
+
+    const height = Math.max(0, Math.floor(-p.y / 10));
+    state.maxHeight = Math.max(state.maxHeight, height);
+    state.score = Math.max(state.score, state.maxHeight * 10 + state.combo * 120);
+
+    if (state.cameraStarted) {
+      const desiredCamera = Math.min(-H, p.y - H * .48);
+      state.cameraTargetY = Math.min(state.cameraTargetY, desiredCamera);
+      const pressure = clamp(state.maxHeight / 450, 0, 1);
+      state.scrollSpeed = 48 + pressure * 82 + state.flow * 22;
+      state.cameraTargetY -= state.scrollSpeed * dt;
+      state.cameraY = lerp(state.cameraY, state.cameraTargetY, 1 - Math.pow(.02, dt));
+    }
+
+    state.shake = Math.max(0, state.shake - dt * 1.8);
+
+    if (state.flow > .15 && state.time % .04 < dt) {
+      state.afterImages.push({ x: p.x, y: p.y, vx: p.vx, life: .18, maxLife: .18 });
+    }
+
+    updateParticles(dt);
+    updateAfterImages(dt);
+    generatePlatforms();
+
+    if (p.y - state.cameraY > H + 85) {
+      audio.fail();
+      state.mode = 'gameover';
+      resultText.textContent = `Height: ${state.maxHeight} · Score: ${Math.floor(state.score)} · Best combo: ${state.bestCombo}`;
+      gameOverOverlay.classList.remove('hidden');
+    }
+
+    heightText.textContent = String(state.maxHeight);
+    comboText.textContent = `x${state.combo}`;
+    comboCard.classList.toggle('hot', state.combo >= FLOW_COMBO_THRESHOLD);
+    powerFill.style.transform = `scaleX(${clamp(state.slowTime / SLOW_TIME_DURATION, 0, 1)})`;
+    powerCard.classList.toggle('hidden', state.slowTime <= 0);
+  }
+
+  function updateParticles(dt) {
+    for (const part of state.particles) {
+      part.life -= dt;
+      part.x += part.vx * dt;
+      part.y += part.vy * dt;
+      part.vy += 500 * dt;
+      part.vx *= Math.pow(.08, dt);
+    }
+    state.particles = state.particles.filter(p => p.life > 0);
+  }
+
+  function updateAfterImages(dt) {
+    for (const img of state.afterImages) img.life -= dt;
+    state.afterImages = state.afterImages.filter(i => i.life > 0);
+  }
+
+  function draw() {
+    const shakeX = state.shake ? rand(-state.shake, state.shake) * 12 : 0;
+    const shakeY = state.shake ? rand(-state.shake, state.shake) * 12 : 0;
+
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
+    drawBackground();
+    drawSpeedLines();
+    drawPlatforms();
+    drawPowerUps();
+    drawParticles(false);
+    drawPlayerTrails();
+    drawPlayer();
+    drawParticles(true);
+    ctx.restore();
+    drawSlowOverlay();
+
+    if (state.pause) {
+      ctx.fillStyle = 'rgba(0,0,0,.45)';
+      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = 'rgba(255,255,255,.92)';
+      ctx.textAlign = 'center';
+      ctx.font = '800 40px ui-sans-serif, system-ui';
+      ctx.fillText('Paused', W / 2, H / 2);
+    }
+  }
+
+  function drawSlowOverlay() {
+    if (state.slowPulse <= .02) return;
+
+    ctx.save();
+    ctx.globalAlpha = state.slowPulse;
+    const vignette = ctx.createRadialGradient(W / 2, H / 2, H * .18, W / 2, H / 2, H * .72);
+    vignette.addColorStop(0, 'rgba(120,220,255,0)');
+    vignette.addColorStop(.72, 'rgba(72,132,255,.08)');
+    vignette.addColorStop(1, 'rgba(0,0,0,.34)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = 'rgba(138,232,255,.36)';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(10, 10, W - 20, H - 20);
+    ctx.restore();
+  }
+
+  function drawBackground() {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    const flow = state.flow;
+    const slow = state.slowPulse;
+    g.addColorStop(0, `rgb(${Math.floor(8 + flow * 16 + slow * 8)}, ${Math.floor(18 + flow * 28 + slow * 24)}, ${Math.floor(40 + flow * 38 + slow * 58)})`);
+    g.addColorStop(1, '#05070d');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    ctx.globalAlpha = .14 + flow * .08 + slow * .08;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    const offset = ((-state.cameraY * .23) % 48 + 48) % 48;
+    for (let y = -48 + offset; y < H + 48; y += 48) {
+      ctx.beginPath();
+      ctx.moveTo(52, y);
+      ctx.lineTo(52, y + 18);
+      ctx.moveTo(W - 52, y + 8);
+      ctx.lineTo(W - 52, y + 26);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = .18;
+    ctx.fillStyle = '#d9f8ff';
+    for (let i = 0; i < 36; i++) {
+      const x = (i * 73 + 19) % W;
+      const y = ((i * 131 + state.cameraY * -.08) % H + H) % H;
+      ctx.fillRect(x, y, 1.5, 1.5);
+    }
+    ctx.restore();
+  }
+
+  function drawSpeedLines() {
+    if (state.flow <= .02 && state.slowPulse <= .02) return;
+    const p = state.player;
+    const speed = Math.abs(p.vx);
+    const preview = jumpPreviewTarget();
+    const targetY = preview ? screenY(preview.targetY) : null;
+    const targetVisible = targetY !== null && targetY > -80 && targetY < H + 80;
+    const direction = Math.sign(p.vx || 1);
+    const baseAlpha = Math.max(state.flow * clamp(speed / 280, .2, 1), state.slowPulse * .34);
+    ctx.save();
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 22; i++) {
+      const x = rand(20, W - 20);
+      const focus = targetVisible && i < 10;
+      const y = focus ? targetY + rand(-58, 58) : rand(0, H);
+      const len = rand(18, 70) * Math.max(state.flow, state.slowPulse * .8);
+      const distance = targetVisible ? Math.abs(y - targetY) : 999;
+      const targetFade = clamp(1 - distance / 82, 0, 1);
+      const alpha = baseAlpha * (focus ? .2 + targetFade * .65 : .35);
+      const color = focus ? '255,255,255' : '190,245,255';
+      const line = ctx.createLinearGradient(x, y, x - direction * len, y);
+      line.addColorStop(0, `rgba(${color},0)`);
+      line.addColorStop(.45, `rgba(${color},${alpha})`);
+      line.addColorStop(1, `rgba(${color},0)`);
+      ctx.strokeStyle = line;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - direction * len, y + rand(-4, 4));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawPlatforms() {
+    for (const plat of state.platforms) {
+      const y = screenY(plat.y);
+      if (y < -40 || y > H + 40) continue;
+      const x = plat.x;
+      const radius = 8;
+      const isBoost = plat.kind === 'boost';
+      const isStart = plat.kind === 'start';
+      const isMilestone = plat.kind === 'milestone';
+      const landed = plat.touched && !isBoost && !isStart && !isMilestone;
+
+      ctx.save();
+      if (landed || isBoost || isMilestone) {
+        ctx.shadowColor = isMilestone ? 'rgba(255,224,138,.36)' : isBoost ? 'rgba(255,224,138,.8)' : 'rgba(255,78,94,.42)';
+        ctx.shadowBlur = isMilestone ? 14 : isBoost ? 18 : 10;
+      }
+      ctx.fillStyle = isMilestone ? 'rgba(255,224,138,.9)' : landed ? 'rgba(255,78,94,.9)' : isStart ? 'rgba(255,255,255,.22)' : isBoost ? 'rgba(255,224,138,.92)' : 'rgba(190,220,255,.86)';
+      roundRect(ctx, x, y, plat.w, plat.h, radius);
+      ctx.fill();
+
+      ctx.fillStyle = isBoost || isMilestone ? 'rgba(90,50,0,.18)' : 'rgba(0,0,0,.16)';
+      ctx.fillRect(x + 8, y + plat.h - 4, plat.w - 16, 3);
+
+      if (isMilestone) {
+        const flagX = W - 70;
+        const poleTop = y - 42;
+        ctx.strokeStyle = 'rgba(255,255,255,.78)';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(flagX, y + 2);
+        ctx.lineTo(flagX, poleTop);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255,94,112,.96)';
+        ctx.beginPath();
+        ctx.moveTo(flagX + 2, poleTop + 2);
+        ctx.lineTo(flagX + 43, poleTop + 11);
+        ctx.lineTo(flagX + 2, poleTop + 20);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(8,13,24,.82)';
+        roundRect(ctx, 16, y - 34, 102, 24, 8);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(255,255,255,.94)';
+        ctx.font = '800 14px ui-sans-serif, system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${plat.milestoneHeight}`, 67, y - 22);
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawPowerUps() {
+    for (const plat of state.platforms) {
+      if (!plat.powerUp) continue;
+
+      const x = plat.x + plat.w / 2;
+      const y = screenY(plat.y - 26);
+      if (y < -40 || y > H + 40) continue;
+
+      const pulse = (Math.sin(state.time * 5 + plat.id) + 1) / 2;
+      const r = 15 + pulse * 1.6;
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(138,232,255,.9)';
+      ctx.shadowBlur = 18 + pulse * 12;
+
+      ctx.fillStyle = 'rgba(138,232,255,.95)';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(5,12,22,.72)';
+      ctx.beginPath();
+      ctx.arc(x, y, r - 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(238,252,255,.96)';
+      ctx.beginPath();
+      ctx.moveTo(x - 7, y - 8);
+      ctx.lineTo(x + 7, y - 8);
+      ctx.lineTo(x + 2.5, y - 2);
+      ctx.lineTo(x + 2.5, y + 2);
+      ctx.lineTo(x + 7, y + 8);
+      ctx.lineTo(x - 7, y + 8);
+      ctx.lineTo(x - 2.5, y + 2);
+      ctx.lineTo(x - 2.5, y - 2);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(138,232,255,.9)';
+      ctx.beginPath();
+      ctx.moveTo(x - 4, y - 5);
+      ctx.lineTo(x + 4, y - 5);
+      ctx.lineTo(x, y - 1);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(255,255,255,${.36 + pulse * .3})`;
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(x, y, r + 6, -state.time * 1.8, Math.PI * 1.45 - state.time * 1.8);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawPlayerTrails() {
+    if (!state.afterImages.length) return;
+    const p = state.player;
+    for (const img of state.afterImages) {
+      const a = img.life / img.maxLife;
+      drawPlayerShape(img.x, screenY(img.y), p.w, p.h, p.facing, `rgba(138,232,255,${.16 * a})`, 0, true, 0);
+    }
+  }
+
+  function drawPlayer() {
+    if (!state.player) return;
+    const p = state.player;
+    const y = screenY(p.y);
+    const sx = 1 + p.squash * .35;
+    const sy = 1 - p.squash * .55;
+    const fill = state.combo >= FLOW_COMBO_THRESHOLD ? '#e8fbff' : '#f3f6ff';
+    const flipProgress = p.flip > 0 ? 1 - p.flip : 0;
+    const easedFlip = flipProgress * flipProgress * (3 - 2 * flipProgress);
+    const flipAngle = p.flip > 0 ? p.flipDir * easedFlip * Math.PI * 2 : 0;
+    drawPlayerShape(p.x, y, p.w * sx, p.h * sy, p.facing, fill, state.flow, false, flipAngle);
+  }
+
+  function drawPlayerShape(x, y, w, h, facing, fill, flow, ghost, flipAngle = 0) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(flipAngle + clamp(state.player ? state.player.vx / 1600 : 0, -.22, .22));
+
+    if (!ghost) {
+      ctx.shadowColor = flow > .2 ? 'rgba(138,232,255,.9)' : 'rgba(0,0,0,.4)';
+      ctx.shadowBlur = flow > .2 ? 18 : 6;
+    }
+
+    ctx.fillStyle = fill;
+    roundRect(ctx, -w / 2, -h / 2, w, h, 11);
+    ctx.fill();
+
+    if (!ghost) {
+      ctx.fillStyle = '#101826';
+      ctx.beginPath();
+      ctx.arc(-5 + facing * 4, -8, 3, 0, Math.PI * 2);
+      ctx.arc(8 + facing * 4, -8, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(16,24,38,.7)';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-9, 7);
+      ctx.quadraticCurveTo(0, 12, 10, 7);
+      ctx.stroke();
+
+      ctx.strokeStyle = flow > .3 ? 'rgba(255,224,138,.95)' : 'rgba(138,232,255,.7)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-w / 2 + 7, h / 2 - 7);
+      ctx.lineTo(w / 2 - 7, h / 2 - 7);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawParticles(foreground) {
+    for (const part of state.particles) {
+      const y = part.y;
+      if (foreground !== (part.type === 'flow')) continue;
+      const a = clamp(part.life / part.maxLife, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.fillStyle = part.type === 'flow' ? 'rgba(255,224,138,.95)' : part.type === 'slow' ? 'rgba(138,232,255,.9)' : 'rgba(220,235,255,.62)';
+      ctx.beginPath();
+      ctx.arc(part.x, part.y, part.size * a, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function roundRect(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.lineTo(x + w - r, y);
+    c.quadraticCurveTo(x + w, y, x + w, y + r);
+    c.lineTo(x + w, y + h - r);
+    c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    c.lineTo(x + r, y + h);
+    c.quadraticCurveTo(x, y + h, x, y + h - r);
+    c.lineTo(x, y + r);
+    c.quadraticCurveTo(x, y, x + r, y);
+  }
+
+  let last = performance.now();
+  function loop(now) {
+    const dt = Math.min(.033, (now - last) / 1000 || .016);
+    last = now;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function requestJump() {
+    if (state.mode !== 'playing') return;
+    state.player.jumpBuffer = .12;
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space'].includes(e.code)) e.preventDefault();
+    keys.add(e.key);
+
+    if (e.code === 'Space' && state.mode === 'gameover') {
+      audio.init();
+      resetGame();
+      return;
+    }
+    if (e.code === 'Space' && state.mode === 'menu') {
+      audio.init();
+      resetGame();
+      return;
+    }
+    if (e.code === 'Space' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') requestJump();
+    if (e.key === 'r' || e.key === 'R') {
+      audio.init();
+      resetGame();
+    }
+    if (e.key === 'p' || e.key === 'P') state.pause = !state.pause;
+  });
+
+  window.addEventListener('keyup', (e) => keys.delete(e.key));
+
+  startButton.addEventListener('click', () => {
+    audio.init();
+    resetGame();
+  });
+  restartButton.addEventListener('click', () => {
+    audio.init();
+    resetGame();
+  });
+
+  canvas.addEventListener('pointerdown', (e) => {
+    audio.init();
+    if (state.mode !== 'playing') return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    keys.add(x < rect.width / 2 ? 'ArrowLeft' : 'ArrowRight');
+    requestJump();
+  });
+  canvas.addEventListener('pointerup', () => {
+    keys.delete('ArrowLeft');
+    keys.delete('ArrowRight');
+  });
+  canvas.addEventListener('pointercancel', () => {
+    keys.delete('ArrowLeft');
+    keys.delete('ArrowRight');
+  });
+
+  resetGame();
+  state.mode = 'menu';
+  startOverlay.classList.remove('hidden');
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
