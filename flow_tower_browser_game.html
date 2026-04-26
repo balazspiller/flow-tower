@@ -304,6 +304,7 @@
   const OVERDRIVE_TIME_SCALE = .84;
   const POWERUP_CHANCE = .035;
   const SPRING_POWERUP_CHANCE = .018;
+  const POWERUP_PLATFORM_COOLDOWN = 10;
   const SPRING_LAUNCH_SPEED = 1650;
   const SPRING_COMBO_GRACE = 2.4;
   const MILESTONE_HEIGHT_STEP = 200;
@@ -365,6 +366,7 @@
     slowPulse: 0,
     shake: 0,
     pause: false,
+    powerUpCooldown: 0,
     platformCursorY: 0,
     nextMilestoneHeight: MILESTONE_HEIGHT_STEP,
     platforms: [],
@@ -383,6 +385,7 @@
       vy: 0,
       grounded: false,
       lastPlatformId: null,
+      lastPlatformY: null,
       coyote: 0,
       jumpBuffer: 0,
       facing: 1,
@@ -412,6 +415,17 @@
     return false;
   }
 
+  function nextPowerUp(kind) {
+    if (state.powerUpCooldown > 0) {
+      state.powerUpCooldown -= 1;
+      return false;
+    }
+
+    const powerUp = randomPowerUp(kind);
+    if (powerUp) state.powerUpCooldown = POWERUP_PLATFORM_COOLDOWN;
+    return powerUp;
+  }
+
   function addMilestonesDownTo(id, yLimit) {
     while (-state.nextMilestoneHeight * 10 >= yLimit) {
       const height = state.nextMilestoneHeight;
@@ -437,6 +451,7 @@
     state.slowPulse = 0;
     state.shake = 0;
     state.pause = false;
+    state.powerUpCooldown = 0;
     state.platforms = [];
     state.nextMilestoneHeight = MILESTONE_HEIGHT_STEP;
     state.particles = [];
@@ -454,7 +469,7 @@
       const margin = 26;
       const x = side % 3 === 0 ? rand(margin, W * .35) : side % 3 === 1 ? rand(W * .45, W - pw - margin) : rand(margin, W - pw - margin);
       const kind = Math.random() < .08 ? 'boost' : 'normal';
-      const powerUp = randomPowerUp(kind);
+      const powerUp = nextPowerUp(kind);
       state.platforms.push(platform(id++, x, y, pw, kind, powerUp));
       y -= rand(58 + difficulty * 12, 94 + difficulty * 22);
       id = addMilestonesDownTo(id, y);
@@ -493,7 +508,7 @@
       if (Math.random() < .05 + difficulty * .04) kind = 'thin';
       if (Math.random() < .07) kind = 'boost';
 
-      const powerUp = randomPowerUp(kind);
+      const powerUp = nextPowerUp(kind);
       state.platforms.push(platform(id++, x, y, kind === 'thin' ? pw * .7 : pw, kind, powerUp));
       y -= gap;
       id = addMilestonesDownTo(id, y);
@@ -702,6 +717,7 @@
     }
 
     const oldY = p.y;
+    const wasGrounded = p.grounded;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
 
@@ -734,12 +750,16 @@
             burst(p.x, screenY(plat.y), 26, 'flow');
           }
 
-          if (plat.id !== p.lastPlatformId) {
+          const isNewPlatform = plat.id !== p.lastPlatformId;
+          const isLandingAfterAir = !wasGrounded || isNewPlatform;
+
+          if (isLandingAfterAir) {
             if (!state.cameraStarted && plat.kind !== 'start') state.cameraStarted = true;
-            const climbing = plat.y < (state.maxHeight ? -state.maxHeight + 12 : 99999);
-            if (climbing || state.comboTimer > 0) startCombo(plat.y);
+            const climbing = p.lastPlatformY === null || plat.y < p.lastPlatformY - 1;
+            if (climbing) startCombo(plat.y);
             else breakCombo();
             p.lastPlatformId = plat.id;
+            p.lastPlatformY = plat.y;
             plat.touched = true;
           }
           break;
