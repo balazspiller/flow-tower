@@ -265,6 +265,7 @@
           <li>Landing on higher platforms quickly keeps the combo alive.</li>
           <li>At combo x5+, the tower enters flow: trails, speed lines, stronger sound, and extra jump assist. At x20+, jumps get extra hang time and overdrive effects.</li>
           <li>Rare blue hourglasses appear on some platforms and slow time for 5 seconds, or 7.5 seconds during overdrive.</li>
+          <li>Above height 500, rare spiky ledges can be passed through from below but end the run if you drop onto them.</li>
           <li>Perfect-ish landings preserve momentum better than hard landings.</li>
         </ul>
       </div>
@@ -311,6 +312,9 @@
   const SPRING_LAUNCH_SPEED = 1650;
   const SPRING_COMBO_GRACE = 2.4;
   const MILESTONE_HEIGHT_STEP = 200;
+  const SPIKE_HEIGHT_THRESHOLD = 500;
+  const SPIKE_PLATFORM_CHANCE = .035;
+  const SPIKE_PLATFORM_COOLDOWN = 18;
 
   const audio = {
     ctx: null,
@@ -392,6 +396,7 @@
     shake: 0,
     pause: false,
     powerUpCooldown: 0,
+    spikePlatformCooldown: 0,
     platformCursorY: 0,
     nextMilestoneHeight: MILESTONE_HEIGHT_STEP,
     platforms: [],
@@ -425,7 +430,7 @@
   function platform(id, x, y, w, kind = 'normal', powerUp = false, milestoneHeight = null) {
     return {
       id, x, y, w,
-      h: kind === 'milestone' ? 18 : 14,
+      h: kind === 'milestone' ? 18 : kind === 'spike' ? 12 : 14,
       kind,
       touched: false,
       powerUp,
@@ -434,7 +439,7 @@
   }
 
   function randomPowerUp(kind) {
-    if (kind === 'boost') return false;
+    if (kind === 'boost' || kind === 'spike') return false;
     if (Math.random() < SPRING_POWERUP_CHANCE) return 'spring';
     if (Math.random() < POWERUP_CHANCE) return 'slow';
     return false;
@@ -449,6 +454,32 @@
     const powerUp = randomPowerUp(kind);
     if (powerUp) state.powerUpCooldown = POWERUP_PLATFORM_COOLDOWN;
     return powerUp;
+  }
+
+  function lastSafePlatform() {
+    for (let i = state.platforms.length - 1; i >= 0; i--) {
+      const plat = state.platforms[i];
+      if (plat.kind !== 'spike' && plat.kind !== 'milestone') return plat;
+    }
+    return state.platforms[state.platforms.length - 1] || null;
+  }
+
+  function maybeAddSpikePlatform(id, lowerY, upperY) {
+    const height = Math.abs(upperY) / 10;
+    if (height < SPIKE_HEIGHT_THRESHOLD) return id;
+    if (state.spikePlatformCooldown > 0) {
+      state.spikePlatformCooldown -= 1;
+      return id;
+    }
+    if (Math.random() >= SPIKE_PLATFORM_CHANCE) return id;
+
+    const w = rand(70, 118);
+    const margin = 28;
+    const x = rand(margin, W - w - margin);
+    const y = lerp(lowerY, upperY, rand(.38, .62));
+    state.platforms.push(platform(id++, x, y, w, 'spike', false));
+    state.spikePlatformCooldown = SPIKE_PLATFORM_COOLDOWN;
+    return id;
   }
 
   function addMilestonesDownTo(id, yLimit) {
@@ -478,6 +509,7 @@
     state.shake = 0;
     state.pause = false;
     state.powerUpCooldown = 0;
+    state.spikePlatformCooldown = 0;
     state.platforms = [];
     state.nextMilestoneHeight = MILESTONE_HEIGHT_STEP;
     state.particles = [];
@@ -520,7 +552,7 @@
       const pw = rand(112 - difficulty * 28, 205 - difficulty * 52);
       const gap = rand(60 + difficulty * 18 + comboBias * 5, 96 + difficulty * 32 + comboBias * 8);
       const margin = 22;
-      const previous = state.platforms[state.platforms.length - 1];
+      const previous = lastSafePlatform();
       let x;
       if (previous && Math.random() < .72) {
         const direction = previous.x + previous.w / 2 < W / 2 ? 1 : -1;
@@ -536,6 +568,7 @@
 
       const powerUp = nextPowerUp(kind);
       state.platforms.push(platform(id++, x, y, kind === 'thin' ? pw * .7 : pw, kind, powerUp));
+      if (previous) id = maybeAddSpikePlatform(id, previous.y, y);
       y -= gap;
       id = addMilestonesDownTo(id, y);
     }
@@ -567,6 +600,14 @@
   function breakCombo() {
     state.combo = 0;
     state.comboTimer = 0;
+  }
+
+  function endRun() {
+    if (state.mode === 'gameover') return;
+    audio.fail();
+    state.mode = 'gameover';
+    resultText.textContent = `Height: ${state.maxHeight} · Score: ${Math.floor(state.score)} · Best combo: ${state.bestCombo}`;
+    gameOverOverlay.classList.remove('hidden');
   }
 
   function activateSlowTime(x, y) {
@@ -673,6 +714,7 @@
 
     for (const plat of state.platforms) {
       if (plat.id === p.lastPlatformId || plat.kind === 'start') continue;
+      if (plat.kind === 'spike') continue;
       if (plat.y < peakY || plat.y >= p.y - 8) continue;
 
       const dy = plat.y - peakY;
@@ -762,10 +804,18 @@
 
     if (p.vy >= 0) {
       for (const plat of state.platforms) {
-        const wasAbove = oldY + p.h / 2 <= plat.y + 4;
-        const nowBelow = p.y + p.h / 2 >= plat.y;
+        const contactY = plat.kind === 'spike' ? plat.y - 16 : plat.y;
+        const wasAbove = oldY + p.h / 2 <= contactY + 4;
+        const nowBelow = p.y + p.h / 2 >= contactY;
         const overlaps = p.x + p.w / 2 > plat.x && p.x - p.w / 2 < plat.x + plat.w;
-        if (wasAbove && nowBelow && overlaps && p.y + p.h / 2 < plat.y + 28) {
+        if (wasAbove && nowBelow && overlaps && p.y + p.h / 2 < contactY + 28) {
+          if (plat.kind === 'spike') {
+            burst(p.x, screenY(contactY), 34, 'dust');
+            state.shake = Math.max(state.shake, .72);
+            endRun();
+            return;
+          }
+
           p.y = plat.y - p.h / 2;
           const hardLanding = clamp(p.vy / 900, 0, 1);
           p.vy = 0;
@@ -841,10 +891,7 @@
     generatePlatforms();
 
     if (p.y - state.cameraY > H + 85) {
-      audio.fail();
-      state.mode = 'gameover';
-      resultText.textContent = `Height: ${state.maxHeight} · Score: ${Math.floor(state.score)} · Best combo: ${state.bestCombo}`;
-      gameOverOverlay.classList.remove('hidden');
+      endRun();
     }
 
     heightText.textContent = String(state.maxHeight);
@@ -993,19 +1040,37 @@
       const isBoost = plat.kind === 'boost';
       const isStart = plat.kind === 'start';
       const isMilestone = plat.kind === 'milestone';
-      const landed = plat.touched && !isBoost && !isStart && !isMilestone;
+      const isSpike = plat.kind === 'spike';
+      const landed = plat.touched && !isBoost && !isStart && !isMilestone && !isSpike;
 
       ctx.save();
-      if (landed || isBoost || isMilestone) {
-        ctx.shadowColor = isMilestone ? 'rgba(255,224,138,.36)' : isBoost ? 'rgba(255,224,138,.8)' : 'rgba(255,78,94,.42)';
-        ctx.shadowBlur = isMilestone ? 14 : isBoost ? 18 : 10;
+      if (landed || isBoost || isMilestone || isSpike) {
+        ctx.shadowColor = isMilestone ? 'rgba(255,224,138,.36)' : isBoost ? 'rgba(255,224,138,.8)' : isSpike ? 'rgba(255,78,94,.55)' : 'rgba(255,78,94,.42)';
+        ctx.shadowBlur = isMilestone ? 14 : isBoost ? 18 : isSpike ? 12 : 10;
       }
-      ctx.fillStyle = isMilestone ? 'rgba(255,224,138,.9)' : landed ? 'rgba(255,78,94,.9)' : isStart ? 'rgba(255,255,255,.22)' : isBoost ? 'rgba(255,224,138,.92)' : 'rgba(190,220,255,.86)';
+      ctx.fillStyle = isMilestone ? 'rgba(255,224,138,.9)' : landed ? 'rgba(255,78,94,.9)' : isStart ? 'rgba(255,255,255,.22)' : isBoost ? 'rgba(255,224,138,.92)' : isSpike ? 'rgba(255,78,94,.88)' : 'rgba(190,220,255,.86)';
       roundRect(ctx, x, y, plat.w, plat.h, radius);
       ctx.fill();
 
-      ctx.fillStyle = isBoost || isMilestone ? 'rgba(90,50,0,.18)' : 'rgba(0,0,0,.16)';
-      ctx.fillRect(x + 8, y + plat.h - 4, plat.w - 16, 3);
+      if (isSpike) {
+        const teeth = Math.max(4, Math.floor(plat.w / 18));
+        const toothW = plat.w / teeth;
+        ctx.fillStyle = 'rgba(255,238,242,.95)';
+        ctx.beginPath();
+        for (let i = 0; i < teeth; i++) {
+          const left = x + i * toothW;
+          ctx.moveTo(left + 1, y + 1);
+          ctx.lineTo(left + toothW / 2, y - 16);
+          ctx.lineTo(left + toothW - 1, y + 1);
+        }
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(80,4,18,.28)';
+        ctx.fillRect(x + 8, y + plat.h - 4, plat.w - 16, 3);
+      } else {
+        ctx.fillStyle = isBoost || isMilestone ? 'rgba(90,50,0,.18)' : 'rgba(0,0,0,.16)';
+        ctx.fillRect(x + 8, y + plat.h - 4, plat.w - 16, 3);
+      }
 
       if (isMilestone) {
         const flagX = W - 70;
