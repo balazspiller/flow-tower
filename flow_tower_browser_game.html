@@ -269,7 +269,7 @@
     <aside class="side">
       <div class="side-card">
         <h2>Controls</h2>
-        <p><kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> move · <kbd>Space</kbd>/<kbd>↑</kbd> jump · <kbd>Space</kbd> start/restart · <kbd>R</kbd> restart after a fall · <kbd>P</kbd> pause</p>
+        <p><kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> move · <kbd>Space</kbd>/<kbd>↑</kbd> jump · tap upper left/right to jump that way · hold lower left/right to move, swipe up to jump · <kbd>R</kbd> restart · <kbd>P</kbd> pause</p>
       </div>
       <div class="side-card">
         <h2>Flow system</h2>
@@ -328,6 +328,20 @@
   const SPIKE_HEIGHT_THRESHOLD = 500;
   const SPIKE_PLATFORM_CHANCE = .035;
   const SPIKE_PLATFORM_COOLDOWN = 18;
+  const MOVE_ONLY_ZONE_RATIO = .75;
+  const SWIPE_UP_JUMP_RATIO = .08;
+  const SWIPE_UP_JUMP_MIN = 34;
+  const TOUCH_DIR_HOLD = .14;
+
+  const touchInput = {
+    active: false,
+    pointerId: null,
+    dir: 0,
+    holdDir: 0,
+    holdTimer: 0,
+    startY: 0,
+    swipeJumped: false
+  };
 
   const audio = {
     ctx: null,
@@ -754,8 +768,11 @@
     p.jumpBuffer = Math.max(0, p.jumpBuffer - dt);
     p.coyote = Math.max(0, p.coyote - dt);
 
-    const left = keys.has('ArrowLeft') || keys.has('a') || keys.has('A');
-    const right = keys.has('ArrowRight') || keys.has('d') || keys.has('D');
+    touchInput.holdTimer = Math.max(0, touchInput.holdTimer - rawDt);
+    if (touchInput.holdTimer <= 0) touchInput.holdDir = 0;
+    const touchDir = touchInput.dir || touchInput.holdDir;
+    const left = keys.has('ArrowLeft') || keys.has('a') || keys.has('A') || touchDir < 0;
+    const right = keys.has('ArrowRight') || keys.has('d') || keys.has('D') || touchDir > 0;
     const input = (right ? 1 : 0) - (left ? 1 : 0);
 
     const absVX = Math.abs(p.vx);
@@ -1301,6 +1318,17 @@
     state.player.jumpBuffer = .12;
   }
 
+  function releaseTouchInput() {
+    if (touchInput.dir) {
+      touchInput.holdDir = touchInput.dir;
+      touchInput.holdTimer = TOUCH_DIR_HOLD;
+    }
+    touchInput.active = false;
+    touchInput.pointerId = null;
+    touchInput.dir = 0;
+    touchInput.swipeJumped = false;
+  }
+
   window.addEventListener('keydown', (e) => {
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space'].includes(e.code)) e.preventDefault();
     keys.add(e.key);
@@ -1335,20 +1363,43 @@
   });
 
   canvas.addEventListener('pointerdown', (e) => {
+    if (!e.isPrimary) return;
+    e.preventDefault();
     audio.init();
     if (state.mode !== 'playing') return;
+    canvas.setPointerCapture?.(e.pointerId);
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    keys.add(x < rect.width / 2 ? 'ArrowLeft' : 'ArrowRight');
-    requestJump();
+    const y = e.clientY - rect.top;
+    const isMoveOnlyTap = y >= rect.height * MOVE_ONLY_ZONE_RATIO;
+    touchInput.active = true;
+    touchInput.pointerId = e.pointerId;
+    touchInput.dir = x < rect.width / 2 ? -1 : 1;
+    touchInput.holdDir = 0;
+    touchInput.holdTimer = 0;
+    touchInput.startY = y;
+    touchInput.swipeJumped = !isMoveOnlyTap;
+    if (!isMoveOnlyTap) requestJump();
   });
-  canvas.addEventListener('pointerup', () => {
-    keys.delete('ArrowLeft');
-    keys.delete('ArrowRight');
+  canvas.addEventListener('pointermove', (e) => {
+    if (!touchInput.active || e.pointerId !== touchInput.pointerId) return;
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const swipeThreshold = Math.max(SWIPE_UP_JUMP_MIN, rect.height * SWIPE_UP_JUMP_RATIO);
+    if (!touchInput.swipeJumped && touchInput.startY - y >= swipeThreshold) {
+      touchInput.swipeJumped = true;
+      requestJump();
+    }
   });
-  canvas.addEventListener('pointercancel', () => {
-    keys.delete('ArrowLeft');
-    keys.delete('ArrowRight');
+  canvas.addEventListener('pointerup', (e) => {
+    if (e.pointerId !== touchInput.pointerId) return;
+    e.preventDefault();
+    releaseTouchInput();
+  });
+  canvas.addEventListener('pointercancel', (e) => {
+    if (e.pointerId !== touchInput.pointerId) return;
+    releaseTouchInput();
   });
 
   resetGame();
