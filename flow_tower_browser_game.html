@@ -324,16 +324,37 @@
     tone(freq, duration = .06, type = 'sine', gain = .045) {
       if (!this.enabled || !this.ctx) return;
       const t = this.ctx.currentTime;
+      const slowActive = state.slowTime > 0;
+      const soundFreq = slowActive ? freq * .54 : freq;
+      const soundDuration = slowActive ? duration * 1.22 : duration;
       const osc = this.ctx.createOscillator();
       const amp = this.ctx.createGain();
       osc.type = type;
-      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.setValueAtTime(soundFreq, t);
       amp.gain.setValueAtTime(0.0001, t);
       amp.gain.exponentialRampToValueAtTime(gain, t + .012);
-      amp.gain.exponentialRampToValueAtTime(0.0001, t + duration);
-      osc.connect(amp).connect(this.ctx.destination);
+      amp.gain.exponentialRampToValueAtTime(0.0001, t + soundDuration);
+      if (slowActive) {
+        const filter = this.ctx.createBiquadFilter();
+        const echo = this.ctx.createDelay(.45);
+        const feedback = this.ctx.createGain();
+        const wet = this.ctx.createGain();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(760, t);
+        filter.Q.setValueAtTime(.35, t);
+        echo.delayTime.setValueAtTime(.16, t);
+        feedback.gain.setValueAtTime(.28, t);
+        wet.gain.setValueAtTime(.34, t);
+        osc.connect(amp).connect(filter);
+        filter.connect(this.ctx.destination);
+        filter.connect(echo);
+        echo.connect(feedback).connect(echo);
+        echo.connect(wet).connect(this.ctx.destination);
+      } else {
+        osc.connect(amp).connect(this.ctx.destination);
+      }
       osc.start(t);
-      osc.stop(t + duration + .02);
+      osc.stop(t + soundDuration + .02);
     },
     jump(power) { this.tone(170 + power * 180, .055, 'triangle', .035); },
     land(combo) { this.tone(220 + combo * 28, .07, combo >= FLOW_COMBO_THRESHOLD ? 'square' : 'sine', combo >= FLOW_COMBO_THRESHOLD ? .055 : .035); },
