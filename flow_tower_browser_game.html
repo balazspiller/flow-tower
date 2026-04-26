@@ -263,8 +263,8 @@
         <ul class="tips">
           <li>Horizontal speed increases jump power and lets you skip floors.</li>
           <li>Landing on higher platforms quickly keeps the combo alive.</li>
-          <li>At combo x5+, the tower enters flow: trails, speed lines, stronger sound, and extra jump assist. At x20+, jumps get extra hang time, mild slow time, and overdrive effects.</li>
-          <li>Rare blue hourglasses appear on some platforms and slow time for 5 seconds.</li>
+          <li>At combo x5+, the tower enters flow: trails, speed lines, stronger sound, and extra jump assist. At x20+, jumps get extra hang time and overdrive effects.</li>
+          <li>Rare blue hourglasses appear on some platforms and slow time for 5 seconds, or 7.5 seconds during overdrive.</li>
           <li>Perfect-ish landings preserve momentum better than hard landings.</li>
         </ul>
       </div>
@@ -297,11 +297,14 @@
   const lerp = (a, b, t) => a + (b - a) * t;
   const FLOW_COMBO_THRESHOLD = 5;
   const OVERDRIVE_COMBO_THRESHOLD = 20;
+  const OVERDRIVE_FULL_COMBO = 30;
+  const OVERDRIVE_MIN_INTENSITY = .025;
   const JUMP_SPEED = 620;
   const GRAVITY = 1720;
   const SLOW_TIME_DURATION = 5;
+  const OVERDRIVE_SLOW_TIME_DURATION = 7.5;
   const SLOW_TIME_SCALE = .46;
-  const OVERDRIVE_TIME_SCALE = .84;
+  const OVERDRIVE_TIME_SCALE = 1;
   const POWERUP_CHANCE = .035;
   const SPRING_POWERUP_CHANCE = .018;
   const POWERUP_PLATFORM_COOLDOWN = 10;
@@ -384,6 +387,7 @@
     comboTimer: 0,
     flow: 0,
     slowTime: 0,
+    slowTimeDuration: SLOW_TIME_DURATION,
     slowPulse: 0,
     shake: 0,
     pause: false,
@@ -469,6 +473,7 @@
     state.comboTimer = 0;
     state.flow = 0;
     state.slowTime = 0;
+    state.slowTimeDuration = SLOW_TIME_DURATION;
     state.slowPulse = 0;
     state.shake = 0;
     state.pause = false;
@@ -555,7 +560,7 @@
     }
 
     if (state.combo >= OVERDRIVE_COMBO_THRESHOLD) {
-      burst(W / 2, screenY(platformY), 24 + Math.floor(overdrive * 30), 'overdrive');
+      burst(W / 2, screenY(platformY), 4 + Math.floor(overdrive * 50), 'overdrive');
     }
   }
 
@@ -565,7 +570,9 @@
   }
 
   function activateSlowTime(x, y) {
-    state.slowTime = SLOW_TIME_DURATION;
+    const duration = comboOverdrive() > 0 ? OVERDRIVE_SLOW_TIME_DURATION : SLOW_TIME_DURATION;
+    state.slowTime = duration;
+    state.slowTimeDuration = duration;
     state.slowPulse = 1;
     state.shake = Math.max(state.shake, .18);
     burst(x, y, 46, 'slow');
@@ -609,24 +616,29 @@
   }
 
   function burst(x, y, n, type = 'dust') {
+    const overdriveIntensity = type === 'overdrive' ? comboOverdrive() : 1;
     for (let i = 0; i < n; i++) {
       const a = rand(0, Math.PI * 2);
       const isHighEnergy = type === 'flow' || type === 'spring' || type === 'overdrive';
-      const sp = type === 'overdrive' ? rand(180, 560) : isHighEnergy ? rand(90, 380) : rand(40, 170);
+      const sp = type === 'overdrive' ? rand(120, 300 + overdriveIntensity * 260) : isHighEnergy ? rand(90, 380) : rand(40, 170);
       state.particles.push({
         x, y,
         vx: Math.cos(a) * sp,
-        vy: type === 'spring' || type === 'overdrive' ? -rand(160, 520) - Math.abs(Math.sin(a)) * sp : Math.sin(a) * sp - rand(10, 90),
-        life: type === 'overdrive' ? rand(.45, 1) : isHighEnergy ? rand(.35, .8) : rand(.18, .45),
+        vy: type === 'spring' || type === 'overdrive' ? -rand(120, 260 + overdriveIntensity * 260) - Math.abs(Math.sin(a)) * sp : Math.sin(a) * sp - rand(10, 90),
+        life: type === 'overdrive' ? rand(.22, .42 + overdriveIntensity * .58) : isHighEnergy ? rand(.35, .8) : rand(.18, .45),
         maxLife: type === 'overdrive' ? 1 : isHighEnergy ? .8 : .45,
-        size: type === 'overdrive' ? rand(2.5, 8) : isHighEnergy ? rand(2, 6) : rand(1, 4),
+        size: type === 'overdrive' ? rand(1.5, 2.5 + overdriveIntensity * 5.5) : isHighEnergy ? rand(2, 6) : rand(1, 4),
+        alpha: type === 'overdrive' ? .12 + overdriveIntensity * .88 : 1,
         type
       });
     }
   }
 
   function comboOverdrive() {
-    return state.combo >= OVERDRIVE_COMBO_THRESHOLD ? clamp((state.combo - OVERDRIVE_COMBO_THRESHOLD + 1) / 10, 0, 1) : 0;
+    if (state.combo < OVERDRIVE_COMBO_THRESHOLD) return 0;
+    const progress = clamp((state.combo - OVERDRIVE_COMBO_THRESHOLD) / (OVERDRIVE_FULL_COMBO - OVERDRIVE_COMBO_THRESHOLD), 0, 1);
+    const eased = progress * progress * (3 - 2 * progress);
+    return lerp(OVERDRIVE_MIN_INTENSITY, 1, eased);
   }
 
   function jumpBoostFor(speedRatio, flowAssist, overdrive) {
@@ -817,11 +829,11 @@
 
     state.shake = Math.max(0, state.shake - dt * (2.1 - comboOverdrive() * .2));
 
-    const trailRate = comboOverdrive() > 0 ? .022 : .04;
+    const trailRate = lerp(.04, .022, comboOverdrive());
     if (state.flow > .15 && state.time % trailRate < dt) {
       const overdriveTrail = comboOverdrive();
       const life = .18 + overdriveTrail * .18;
-      state.afterImages.push({ x: p.x, y: p.y, vx: p.vx, life, maxLife: life, hue: overdriveTrail ? (state.time * 170 + state.combo * 19) % 360 : null });
+      state.afterImages.push({ x: p.x, y: p.y, vx: p.vx, life, maxLife: life, hue: overdriveTrail ? (state.time * 170 + state.combo * 19) % 360 : null, overdrive: overdriveTrail });
     }
 
     updateParticles(dt);
@@ -838,7 +850,7 @@
     heightText.textContent = String(state.maxHeight);
     comboText.textContent = `x${state.combo}`;
     comboCard.classList.toggle('hot', state.combo >= FLOW_COMBO_THRESHOLD);
-    powerFill.style.transform = `scaleX(${clamp(state.slowTime / SLOW_TIME_DURATION, 0, 1)})`;
+    powerFill.style.transform = `scaleX(${clamp(state.slowTime / state.slowTimeDuration, 0, 1)})`;
     powerCard.classList.toggle('hidden', state.slowTime <= 0);
   }
 
@@ -1101,7 +1113,8 @@
     const p = state.player;
     for (const img of state.afterImages) {
       const a = img.life / img.maxLife;
-      const fill = img.hue === null ? `rgba(138,232,255,${.16 * a})` : `hsla(${img.hue}, 96%, 66%, ${(.24 + comboOverdrive() * .2) * a})`;
+      const trailOverdrive = img.overdrive || 0;
+      const fill = img.hue === null ? `rgba(138,232,255,${.16 * a})` : `hsla(${img.hue}, ${60 + trailOverdrive * 36}%, ${82 - trailOverdrive * 16}%, ${(.035 + trailOverdrive * .405) * a})`;
       drawPlayerShape(img.x, screenY(img.y), p.w, p.h, p.facing, fill, 0, true, 0);
     }
   }
@@ -1114,7 +1127,7 @@
     const sy = 1 - p.squash * .55;
     const overdrive = comboOverdrive();
     const hue = (state.time * 150 + state.combo * 15) % 360;
-    const fill = overdrive > 0 ? `hsl(${hue}, 100%, ${86 - overdrive * 8}%)` : state.combo >= FLOW_COMBO_THRESHOLD ? '#e8fbff' : '#f3f6ff';
+    const fill = overdrive > 0 ? `hsl(${hue}, ${45 + overdrive * 55}%, ${92 - overdrive * 14}%)` : state.combo >= FLOW_COMBO_THRESHOLD ? '#e8fbff' : '#f3f6ff';
     const flipProgress = p.flip > 0 ? 1 - p.flip : 0;
     const easedFlip = flipProgress * flipProgress * (3 - 2 * flipProgress);
     const flipAngle = p.flip > 0 ? p.flipDir * easedFlip * Math.PI * 2 : 0;
@@ -1166,13 +1179,13 @@
       if (foreground !== (part.type === 'flow' || part.type === 'spring' || part.type === 'overdrive')) continue;
       const a = clamp(part.life / part.maxLife, 0, 1);
       ctx.save();
-      ctx.globalAlpha = a;
+      ctx.globalAlpha = a * (part.alpha || 1);
       ctx.fillStyle = part.type === 'overdrive' ? `hsl(${(state.time * 190 + part.x) % 360}, 100%, 68%)` : part.type === 'flow' || part.type === 'spring' ? 'rgba(255,224,138,.95)' : part.type === 'slow' ? 'rgba(138,232,255,.9)' : 'rgba(220,235,255,.62)';
       ctx.beginPath();
       ctx.arc(part.x, part.y, part.size * a, 0, Math.PI * 2);
       ctx.fill();
       if (part.type === 'overdrive') {
-        ctx.globalAlpha = a * .32;
+        ctx.globalAlpha = a * .32 * (part.alpha || 1);
         ctx.strokeStyle = ctx.fillStyle;
         ctx.lineWidth = 2;
         ctx.beginPath();
