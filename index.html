@@ -210,6 +210,8 @@
     line-height: 1;
   }
 
+  .help-button[hidden] { display: none; }
+
   .modal {
     position: fixed;
     inset: 0;
@@ -664,6 +666,7 @@
     startOverlay.classList.add('hidden');
     gameOverOverlay.classList.add('hidden');
     powerCard.classList.add('hidden');
+    setHelpButtonAvailable(false);
   }
 
   function generatePlatforms() {
@@ -734,6 +737,7 @@
     state.mode = 'gameover';
     resultText.textContent = `Height: ${state.maxHeight} · Score: ${Math.floor(state.score)} · Best combo: ${state.bestCombo}`;
     gameOverOverlay.classList.remove('hidden');
+    setHelpButtonAvailable(true);
   }
 
   function activateSlowTime(x, y) {
@@ -1518,7 +1522,15 @@
     return !helpModal.classList.contains('hidden');
   }
 
+  function setHelpButtonAvailable(available) {
+    helpButton.hidden = !available;
+    helpButton.tabIndex = available ? 0 : -1;
+    helpButton.setAttribute('aria-hidden', available ? 'false' : 'true');
+    if (!available && helpIsOpen()) closeHelp();
+  }
+
   function openHelp() {
+    if (helpButton.hidden) return;
     pauseBeforeHelp = state.pause;
     if (state.mode === 'playing') state.pause = true;
     helpModal.classList.remove('hidden');
@@ -1530,7 +1542,7 @@
     helpModal.classList.add('hidden');
     helpButton.setAttribute('aria-expanded', 'false');
     if (state.mode === 'playing') state.pause = pauseBeforeHelp;
-    helpButton.focus();
+    if (!helpButton.hidden) helpButton.focus();
   }
 
   function preventPageGesture(e) {
@@ -1630,6 +1642,7 @@
   resetGame();
   state.mode = 'menu';
   startOverlay.classList.remove('hidden');
+  setHelpButtonAvailable(true);
   requestAnimationFrame(loop);
 })();
 </script>
