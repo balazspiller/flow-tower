@@ -857,20 +857,22 @@
           const landingQuality = 1 - clamp(Math.abs(p.x - center) / (plat.w * .72), 0, 1);
           p.vx *= lerp(.78, 1.04, landingQuality);
 
-          if (plat.kind === 'boost') {
+          const isNewPlatform = plat.id !== p.lastPlatformId;
+          const isLandingAfterAir = !wasGrounded || isNewPlatform;
+
+          if (plat.kind === 'boost' && isNewPlatform) {
             p.vx += Math.sign(p.vx || p.facing) * 80;
             p.vy = -170;
             burst(p.x, screenY(plat.y), 26, 'flow');
           }
 
-          const isNewPlatform = plat.id !== p.lastPlatformId;
-          const isLandingAfterAir = !wasGrounded || isNewPlatform;
-
           if (isLandingAfterAir) {
             if (!state.cameraStarted && plat.kind !== 'start') state.cameraStarted = true;
-            const climbing = p.lastPlatformY === null || plat.y < p.lastPlatformY - 1;
-            if (climbing) startCombo(plat.y);
-            else breakCombo();
+            if (isNewPlatform) {
+              const climbing = p.lastPlatformY === null || plat.y < p.lastPlatformY - 1;
+              if (climbing) startCombo(plat.y);
+              else breakCombo();
+            }
             p.lastPlatformId = plat.id;
             p.lastPlatformY = plat.y;
             plat.touched = true;
