@@ -400,6 +400,8 @@
   const OVERDRIVE_COMBO_THRESHOLD = 20;
   const OVERDRIVE_FULL_COMBO = 30;
   const OVERDRIVE_MIN_INTENSITY = .025;
+  const COMBO_TIMER_DURATION = 1.35;
+  const OVERDRIVE_COMBO_TIMER_BONUS = .2;
   const JUMP_SPEED = 620;
   const GRAVITY = 1720;
   const SLOW_TIME_DURATION = 5;
@@ -413,6 +415,8 @@
   const EXTRA_PLATFORM_COUNT = 3;
   const EXTRA_PLATFORM_RANGE = H * 1.5;
   const EXTRA_PLATFORM_MIN_VERTICAL_GAP = 96;
+  const EXTRA_PLATFORM_REVEAL_DELAY = .22;
+  const EXTRA_PLATFORM_REVEAL_TRIGGER_Y = 18;
   const SPRING_LAUNCH_SPEED = 1650;
   const SPRING_COMBO_GRACE = 2.4;
   const MILESTONE_HEIGHT_STEP = 200;
@@ -553,7 +557,9 @@
       touched: false,
       powerUp,
       milestoneHeight,
-      pop
+      pop,
+      hidden: false,
+      revealDelay: 0
     };
   }
 
@@ -702,9 +708,9 @@
     const previousCombo = state.combo;
     state.combo += 1;
     state.bestCombo = Math.max(state.bestCombo, state.combo);
-    state.comboTimer = 1.35;
-    state.score += 50 * state.combo;
     const overdrive = comboOverdrive();
+    state.comboTimer = COMBO_TIMER_DURATION + (overdrive > 0 ? OVERDRIVE_COMBO_TIMER_BONUS : 0);
+    state.score += 50 * state.combo;
     state.shake = Math.min(.82, .07 + state.combo * .012 + overdrive * .12);
     audio.land(state.combo);
 
@@ -791,10 +797,11 @@
       if (extraPlatformTooCloseVertically(platformY, placed)) continue;
       if (extraPlatformOverlaps(platformX, platformY, w)) continue;
 
-      const extra = platform(id++, platformX, platformY, w, 'extra', false, null, .32);
+      const extra = platform(id++, platformX, platformY, w, 'extra');
+      extra.hidden = true;
+      extra.revealDelay = EXTRA_PLATFORM_REVEAL_DELAY;
       state.platforms.push(extra);
       placed.push(extra);
-      burst(platformX + w / 2, screenY(platformY), 34, 'platform');
       made++;
     }
 
@@ -881,6 +888,7 @@
     let closestDistance = Infinity;
 
     for (const plat of state.platforms) {
+      if (plat.hidden) continue;
       if (plat.id === p.lastPlatformId || plat.kind === 'start') continue;
       if (plat.kind === 'spike') continue;
       if (plat.y < peakY || plat.y >= p.y - 8) continue;
@@ -975,6 +983,7 @@
 
     if (p.vy >= 0) {
       for (const plat of state.platforms) {
+        if (plat.hidden) continue;
         const contactY = plat.kind === 'spike' ? plat.y - 16 : plat.y;
         const wasAbove = oldY + p.h / 2 <= contactY + 4;
         const nowBelow = p.y + p.h / 2 >= contactY;
@@ -1093,6 +1102,17 @@
 
   function updatePlatforms(dt) {
     for (const plat of state.platforms) {
+      if (plat.hidden) {
+        const y = screenY(plat.y);
+        if (y > EXTRA_PLATFORM_REVEAL_TRIGGER_Y && y < H + 40) {
+          plat.revealDelay = Math.max(0, plat.revealDelay - dt);
+          if (plat.revealDelay <= 0) {
+            plat.hidden = false;
+            plat.pop = .32;
+            burst(plat.x + plat.w / 2, y, 34, 'platform');
+          }
+        }
+      }
       if (plat.pop > 0) plat.pop = Math.max(0, plat.pop - dt);
     }
   }
@@ -1213,6 +1233,7 @@
 
   function drawPlatforms() {
     for (const plat of state.platforms) {
+      if (plat.hidden) continue;
       const y = screenY(plat.y);
       if (y < -40 || y > H + 40) continue;
       const x = plat.x;
