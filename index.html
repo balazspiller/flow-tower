@@ -421,6 +421,7 @@
           <li>Horizontal speed increases jump power and lets you skip floors.</li>
           <li>The tower has side walls. Hold the opposite direction as you hit one to rebound back into the climb.</li>
           <li>Landing on higher platforms quickly keeps the combo alive.</li>
+          <li>Every 1000 height starts a new tower level: the platform tint changes, spacing relaxes, and the climb ramps up again.</li>
           <li>At combo x5+, the tower enters flow: trails, speed lines, stronger sound, and extra jump assist. At x20+, jumps get extra hang time and overdrive effects.</li>
           <li>Rare blue hourglasses slow time, yellow springs launch you upward, and violet beacons pop extra platforms into the tower.</li>
           <li>Above height 500, cracked platforms crumble shortly after landing. Above height 750, rare spiky ledges can be passed through from below but end the run if you drop onto them.</li>
@@ -518,6 +519,12 @@
   const WALL_DEAD_BOUNCE = 42;
   const WALL_WIDTH = 12;
   const MILESTONE_HEIGHT_STEP = 200;
+  const LEVEL_HEIGHT_STEP = 1000;
+  const LEVEL_BASE_DIFFICULTY_STEP = .12;
+  const LEVEL_BASE_DIFFICULTY_MAX = .62;
+  const LEVEL_PROGRESS_DIFFICULTY = .45;
+  const LEVEL_HAZARD_PRESSURE_STEP = .085;
+  const LEVEL_HAZARD_PRESSURE_MAX = .55;
   const SPIKE_HEIGHT_THRESHOLD = 750;
   const SPIKE_PLATFORM_CHANCE = .035;
   const SPIKE_PLATFORM_COOLDOWN = 18;
@@ -726,6 +733,48 @@
     player: null
   };
 
+  function towerHeightAt(worldY) {
+    return Math.max(0, Math.abs(worldY) / 10);
+  }
+
+  function levelInfoAt(worldY) {
+    const height = towerHeightAt(worldY);
+    return {
+      index: Math.floor(height / LEVEL_HEIGHT_STEP),
+      progress: (height % LEVEL_HEIGHT_STEP) / LEVEL_HEIGHT_STEP
+    };
+  }
+
+  function levelSeed(index) {
+    const raw = Math.sin((index + 1) * 91.73 + 17.41) * 10000;
+    return raw - Math.floor(raw);
+  }
+
+  function levelHue(index) {
+    return Math.floor((levelSeed(index) * 306 + index * 47 + 12) % 360);
+  }
+
+  function levelColorAt(worldY, alpha = .86, lightOffset = 0) {
+    const { index } = levelInfoAt(worldY);
+    if (index === 0) {
+      const light = clamp(80 + lightOffset, 52, 86);
+      return `hsla(213, 45%, ${light}%, ${alpha})`;
+    }
+    return `hsla(${levelHue(index)}, 70%, ${clamp(66 + lightOffset, 44, 78)}%, ${alpha})`;
+  }
+
+  function platformDifficultyAt(worldY) {
+    const { index, progress } = levelInfoAt(worldY);
+    const base = clamp(index * LEVEL_BASE_DIFFICULTY_STEP, 0, LEVEL_BASE_DIFFICULTY_MAX);
+    const levelRamp = Math.pow(progress, .85) * LEVEL_PROGRESS_DIFFICULTY;
+    return clamp(base + levelRamp, 0, 1);
+  }
+
+  function hazardPressureAt(worldY) {
+    const { index, progress } = levelInfoAt(worldY);
+    return clamp((index + progress * .35) * LEVEL_HAZARD_PRESSURE_STEP, 0, LEVEL_HAZARD_PRESSURE_MAX);
+  }
+
   function startRunStats() {
     runStatsCurrent = makeRunStats();
     runStatsCurrent.started = true;
@@ -904,20 +953,21 @@
   }
 
   function maybeAddSpikePlatform(id, lowerY, upperY) {
-    const height = Math.abs(upperY) / 10;
+    const height = towerHeightAt(upperY);
     if (height < SPIKE_HEIGHT_THRESHOLD) return id;
     if (state.spikePlatformCooldown > 0) {
       state.spikePlatformCooldown -= 1;
       return id;
     }
-    if (Math.random() >= SPIKE_PLATFORM_CHANCE) return id;
+    const hazardPressure = hazardPressureAt(upperY);
+    if (Math.random() >= SPIKE_PLATFORM_CHANCE + hazardPressure * .055) return id;
 
     const w = rand(70, 118);
     const margin = 28;
     const x = rand(margin, W - w - margin);
     const y = lerp(lowerY, upperY, rand(.38, .62));
     state.platforms.push(platform(id++, x, y, w, 'spike', false));
-    state.spikePlatformCooldown = SPIKE_PLATFORM_COOLDOWN;
+    state.spikePlatformCooldown = Math.max(10, Math.round(SPIKE_PLATFORM_COOLDOWN - hazardPressure * 10));
     return id;
   }
 
@@ -964,7 +1014,7 @@
     let y = -90;
     let side = 0;
     while (y > -3600) {
-      const difficulty = clamp(Math.abs(y) / 5200, 0, 1);
+      const difficulty = platformDifficultyAt(y);
       const pw = rand(130 - difficulty * 38, 225 - difficulty * 64);
       const margin = 26;
       const x = side % 3 === 0 ? rand(margin, W * .35) : side % 3 === 1 ? rand(W * .45, W - pw - margin) : rand(margin, W - pw - margin);
@@ -989,8 +1039,7 @@
     let y = state.platformCursorY;
     let guard = 0;
     while (y > topNeeded && guard++ < 80) {
-      const height = Math.abs(y);
-      const difficulty = clamp(height / 7600, 0, 1);
+      const difficulty = platformDifficultyAt(y);
       const comboBias = clamp(state.combo / 12, 0, 1);
       const pw = rand(112 - difficulty * 28, 205 - difficulty * 52);
       const gap = rand(60 + difficulty * 18 + comboBias * 5, 96 + difficulty * 32 + comboBias * 8);
@@ -1008,13 +1057,16 @@
       let kind = 'normal';
       if (Math.random() < .05 + difficulty * .04) kind = 'thin';
       if (Math.random() < .07) kind = 'boost';
-      const towerHeight = Math.abs(y) / 10;
+      const towerHeight = towerHeightAt(y);
       if (towerHeight >= CRACKED_HEIGHT_THRESHOLD && kind === 'normal') {
         if (state.crackedPlatformCooldown > 0) {
           state.crackedPlatformCooldown -= 1;
-        } else if (Math.random() < CRACKED_PLATFORM_CHANCE + difficulty * .035) {
-          kind = 'cracked';
-          state.crackedPlatformCooldown = CRACKED_PLATFORM_COOLDOWN;
+        } else {
+          const hazardPressure = hazardPressureAt(y);
+          if (Math.random() < CRACKED_PLATFORM_CHANCE + difficulty * .035 + hazardPressure * .075) {
+            kind = 'cracked';
+            state.crackedPlatformCooldown = Math.max(3, Math.round(CRACKED_PLATFORM_COOLDOWN - hazardPressure * 4));
+          }
         }
       }
 
@@ -1121,7 +1173,7 @@
     let attempts = 0;
 
     while (made < EXTRA_PLATFORM_COUNT && attempts++ < 42) {
-      const difficulty = clamp(Math.abs(p.y) / 7600, 0, 1);
+      const difficulty = platformDifficultyAt(p.y);
       const w = rand(104 - difficulty * 18, 168 - difficulty * 32);
       const platformX = rand(margin, W - w - margin);
       const platformY = p.y - rand(H * .28, EXTRA_PLATFORM_RANGE);
@@ -1636,18 +1688,23 @@
       const popT = plat.pop > 0 ? 1 - plat.pop / .32 : 1;
       const popScale = plat.pop > 0 ? .55 + Math.sin(popT * Math.PI * .5) * .45 : 1;
       const crumbleProgress = isCracked && plat.crumbleTimer > 0 ? 1 - plat.crumbleTimer / CRACKED_PLATFORM_BREAK_DELAY : 0;
+      const isLevelMarker = isMilestone && plat.milestoneHeight % LEVEL_HEIGHT_STEP === 0;
+      const levelFill = levelColorAt(plat.y, .88);
+      const levelBright = levelColorAt(plat.y, .95, 7);
+      const levelShadow = levelColorAt(plat.y, .48, 5);
+      const levelUnderside = levelColorAt(plat.y, .24, -22);
 
       ctx.save();
       if (landed || isBoost || isMilestone || isSpike || isExtra || isCracked) {
-        ctx.shadowColor = isMilestone ? 'rgba(255,224,138,.36)' : isBoost ? 'rgba(255,224,138,.8)' : isSpike ? 'rgba(255,78,94,.55)' : isExtra ? 'rgba(195,150,255,.6)' : isCracked ? 'rgba(190,220,255,.32)' : 'rgba(255,78,94,.42)';
-        ctx.shadowBlur = isMilestone ? 14 : isBoost ? 18 : isSpike ? 12 : isExtra ? 16 : isCracked ? 8 : 10;
+        ctx.shadowColor = isMilestone ? isLevelMarker ? levelShadow : 'rgba(255,224,138,.36)' : isBoost ? 'rgba(255,224,138,.8)' : isSpike ? 'rgba(255,78,94,.55)' : isExtra ? 'rgba(195,150,255,.6)' : isCracked ? levelColorAt(plat.y, .32, -4) : levelShadow;
+        ctx.shadowBlur = isMilestone ? isLevelMarker ? 20 : 14 : isBoost ? 18 : isSpike ? 12 : isExtra ? 16 : isCracked ? 8 : 10;
       }
       ctx.globalAlpha = (plat.pop > 0 ? .62 + popT * .38 : 1) * (isCracked && plat.crumbleTimer > 0 ? 1 - crumbleProgress * .45 : 1);
       ctx.translate(x + plat.w / 2, y + plat.h / 2);
       if (isCracked && plat.crumbleTimer > 0) ctx.translate(rand(-1, 1) * crumbleProgress * 2.2, rand(-1, 1) * crumbleProgress * 1.4);
       ctx.scale(popScale, popScale);
       ctx.translate(-x - plat.w / 2, -y - plat.h / 2);
-      ctx.fillStyle = isMilestone ? 'rgba(255,224,138,.9)' : landed ? 'rgba(255,78,94,.9)' : isStart ? 'rgba(255,255,255,.22)' : isBoost ? 'rgba(255,224,138,.92)' : isSpike ? 'rgba(255,78,94,.88)' : isExtra ? 'rgba(196,168,255,.9)' : 'rgba(190,220,255,.86)';
+      ctx.fillStyle = isMilestone ? isLevelMarker ? levelBright : 'rgba(255,224,138,.9)' : landed ? levelBright : isStart ? 'rgba(255,255,255,.22)' : isBoost ? 'rgba(255,224,138,.92)' : isSpike ? 'rgba(255,78,94,.88)' : isExtra ? 'rgba(196,168,255,.9)' : isCracked ? levelColorAt(plat.y, .78, -6) : levelFill;
       roundRect(ctx, x, y, plat.w, plat.h, radius);
       ctx.fill();
 
@@ -1667,7 +1724,7 @@
         ctx.fillStyle = 'rgba(80,4,18,.28)';
         ctx.fillRect(x + 8, y + plat.h - 4, plat.w - 16, 3);
       } else {
-        ctx.fillStyle = isBoost || isMilestone ? 'rgba(90,50,0,.18)' : isExtra ? 'rgba(40,18,70,.22)' : 'rgba(0,0,0,.16)';
+        ctx.fillStyle = isBoost || (isMilestone && !isLevelMarker) ? 'rgba(90,50,0,.18)' : isExtra ? 'rgba(40,18,70,.22)' : isMilestone && isLevelMarker ? levelUnderside : 'rgba(0,0,0,.16)';
         ctx.fillRect(x + 8, y + plat.h - 4, plat.w - 16, 3);
 
         if (isCracked) {
@@ -1699,7 +1756,7 @@
         ctx.lineTo(flagX, poleTop);
         ctx.stroke();
 
-        ctx.fillStyle = 'rgba(255,94,112,.96)';
+        ctx.fillStyle = isLevelMarker ? levelColorAt(plat.y, .96, 4) : 'rgba(255,94,112,.96)';
         ctx.beginPath();
         ctx.moveTo(flagX + 2, poleTop + 2);
         ctx.lineTo(flagX + 43, poleTop + 11);
