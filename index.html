@@ -519,6 +519,7 @@
   const WALL_DEAD_BOUNCE = 42;
   const WALL_WIDTH = 12;
   const MILESTONE_HEIGHT_STEP = 200;
+  const MILESTONE_PLATFORM_VERTICAL_BUFFER = 96;
   const LEVEL_HEIGHT_STEP = 1000;
   const LEVEL_BASE_DIFFICULTY_STEP = .12;
   const LEVEL_BASE_DIFFICULTY_MAX = .62;
@@ -775,6 +776,24 @@
     return clamp((index + progress * .35) * LEVEL_HAZARD_PRESSURE_STEP, 0, LEVEL_HAZARD_PRESSURE_MAX);
   }
 
+  function nearestMilestoneY(worldY) {
+    const height = towerHeightAt(worldY);
+    const milestoneHeight = Math.round(height / MILESTONE_HEIGHT_STEP) * MILESTONE_HEIGHT_STEP;
+    if (milestoneHeight < MILESTONE_HEIGHT_STEP) return null;
+    return -milestoneHeight * 10;
+  }
+
+  function isTooCloseToMilestoneY(worldY, buffer = MILESTONE_PLATFORM_VERTICAL_BUFFER) {
+    const milestoneY = nearestMilestoneY(worldY);
+    return milestoneY !== null && Math.abs(worldY - milestoneY) < buffer;
+  }
+
+  function moveAboveMilestoneBuffer(worldY, buffer = MILESTONE_PLATFORM_VERTICAL_BUFFER) {
+    const milestoneY = nearestMilestoneY(worldY);
+    if (milestoneY === null || Math.abs(worldY - milestoneY) >= buffer) return worldY;
+    return milestoneY - buffer;
+  }
+
   function startRunStats() {
     runStatsCurrent = makeRunStats();
     runStatsCurrent.started = true;
@@ -966,6 +985,7 @@
     const margin = 28;
     const x = rand(margin, W - w - margin);
     const y = lerp(lowerY, upperY, rand(.38, .62));
+    if (isTooCloseToMilestoneY(y)) return id;
     state.platforms.push(platform(id++, x, y, w, 'spike', false));
     state.spikePlatformCooldown = Math.max(10, Math.round(SPIKE_PLATFORM_COOLDOWN - hazardPressure * 10));
     return id;
@@ -1014,6 +1034,7 @@
     let y = -90;
     let side = 0;
     while (y > -3600) {
+      y = moveAboveMilestoneBuffer(y);
       const difficulty = platformDifficultyAt(y);
       const pw = rand(130 - difficulty * 38, 225 - difficulty * 64);
       const margin = 26;
@@ -1039,6 +1060,7 @@
     let y = state.platformCursorY;
     let guard = 0;
     while (y > topNeeded && guard++ < 80) {
+      y = moveAboveMilestoneBuffer(y);
       const difficulty = platformDifficultyAt(y);
       const comboBias = clamp(state.combo / 12, 0, 1);
       const pw = rand(112 - difficulty * 28, 205 - difficulty * 52);
@@ -1178,6 +1200,7 @@
       const platformX = rand(margin, W - w - margin);
       const platformY = p.y - rand(H * .28, EXTRA_PLATFORM_RANGE);
       if (extraPlatformTooCloseVertically(platformY, placed)) continue;
+      if (isTooCloseToMilestoneY(platformY)) continue;
       if (extraPlatformOverlaps(platformX, platformY, w)) continue;
 
       const extra = platform(id++, platformX, platformY, w, 'extra');
