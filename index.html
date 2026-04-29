@@ -424,7 +424,7 @@
           <li>Every 1000 height starts a new tower level: the platform tint changes, spacing relaxes, and the climb ramps up again.</li>
           <li>At combo x5+, the tower enters flow: trails, speed lines, stronger sound, and extra jump assist. At x20+, jumps get extra hang time and overdrive effects.</li>
           <li>Rare blue hourglasses slow time, yellow springs launch you upward, and violet beacons pop extra platforms into the tower.</li>
-          <li>Above height 500, cracked platforms crumble shortly after landing. Above height 750, rare spiky ledges can be passed through from below but end the run if you drop onto them.</li>
+          <li>Above height 500, cracked platforms crumble shortly after landing. Above height 750, rare spiky ledges can be passed through from below but end the run if you drop onto them. Above height 1000, moving platforms sweep between the tower walls.</li>
           <li>Perfect-ish landings preserve momentum better than hard landings.</li>
         </ul>
         </section>
@@ -533,6 +533,12 @@
   const CRACKED_PLATFORM_CHANCE = .105;
   const CRACKED_PLATFORM_COOLDOWN = 6;
   const CRACKED_PLATFORM_BREAK_DELAY = .28;
+  const MOVING_HEIGHT_THRESHOLD = 1000;
+  const MOVING_PLATFORM_CHANCE = .06;
+  const MOVING_PLATFORM_COOLDOWN = 7;
+  const MOVING_PLATFORM_EDGE_MARGIN = WALL_WIDTH + 16;
+  const MOVING_PLATFORM_SPEED_MIN = 58;
+  const MOVING_PLATFORM_SPEED_MAX = 128;
   const MOVE_ONLY_ZONE_RATIO = .75;
   const SWIPE_UP_JUMP_RATIO = .08;
   const SWIPE_UP_JUMP_MIN = 34;
@@ -726,6 +732,7 @@
     powerUpCooldown: 0,
     spikePlatformCooldown: 0,
     crackedPlatformCooldown: 0,
+    movingPlatformCooldown: 0,
     platformCursorY: 0,
     nextMilestoneHeight: MILESTONE_HEIGHT_STEP,
     platforms: [],
@@ -940,12 +947,16 @@
       pop,
       hidden: false,
       revealDelay: 0,
-      crumbleTimer: 0
+      crumbleTimer: 0,
+      moveMinX: 0,
+      moveMaxX: W - w,
+      moveSpeed: 0,
+      moveDir: 1
     };
   }
 
   function randomPowerUp(kind) {
-    if (kind === 'boost' || kind === 'spike' || kind === 'cracked') return false;
+    if (kind === 'boost' || kind === 'spike' || kind === 'cracked' || kind === 'moving') return false;
     if (Math.random() < PLATFORM_POWERUP_CHANCE) return 'platforms';
     if (Math.random() < SPRING_POWERUP_CHANCE) return 'spring';
     if (Math.random() < POWERUP_CHANCE) return 'slow';
@@ -969,6 +980,15 @@
       if (plat.kind !== 'spike' && plat.kind !== 'milestone') return plat;
     }
     return state.platforms[state.platforms.length - 1] || null;
+  }
+
+  function prepareMovingPlatform(plat, difficulty = 0) {
+    plat.moveMinX = MOVING_PLATFORM_EDGE_MARGIN;
+    plat.moveMaxX = W - plat.w - MOVING_PLATFORM_EDGE_MARGIN;
+    plat.x = clamp(plat.x, plat.moveMinX, plat.moveMaxX);
+    plat.moveSpeed = rand(MOVING_PLATFORM_SPEED_MIN + difficulty * 12, MOVING_PLATFORM_SPEED_MAX + difficulty * 34);
+    plat.moveDir = Math.random() < .5 ? -1 : 1;
+    return plat;
   }
 
   function maybeAddSpikePlatform(id, lowerY, upperY) {
@@ -1022,6 +1042,7 @@
     state.powerUpCooldown = 0;
     state.spikePlatformCooldown = 0;
     state.crackedPlatformCooldown = 0;
+    state.movingPlatformCooldown = 0;
     state.platforms = [];
     state.nextMilestoneHeight = MILESTONE_HEIGHT_STEP;
     state.particles = [];
@@ -1091,9 +1112,21 @@
           }
         }
       }
+      if (towerHeight >= MOVING_HEIGHT_THRESHOLD && kind === 'normal') {
+        if (state.movingPlatformCooldown > 0) {
+          state.movingPlatformCooldown -= 1;
+        } else {
+          const hazardPressure = hazardPressureAt(y);
+          if (Math.random() < MOVING_PLATFORM_CHANCE + difficulty * .035 + hazardPressure * .08) {
+            kind = 'moving';
+            state.movingPlatformCooldown = Math.max(3, Math.round(MOVING_PLATFORM_COOLDOWN - hazardPressure * 4));
+          }
+        }
+      }
 
       const powerUp = nextPowerUp(kind);
-      state.platforms.push(platform(id++, x, y, kind === 'thin' ? pw * .7 : pw, kind, powerUp));
+      const plat = platform(id++, x, y, kind === 'thin' ? pw * .7 : pw, kind, powerUp);
+      state.platforms.push(kind === 'moving' ? prepareMovingPlatform(plat, difficulty) : plat);
       if (previous) id = maybeAddSpikePlatform(id, previous.y, y);
       y -= gap;
       id = addMilestonesDownTo(id, y);
@@ -1553,6 +1586,24 @@
 
   function updatePlatforms(dt) {
     for (const plat of state.platforms) {
+      if (plat.kind === 'moving') {
+        const oldX = plat.x;
+        plat.x += plat.moveDir * plat.moveSpeed * dt;
+        if (plat.x <= plat.moveMinX) {
+          plat.x = plat.moveMinX;
+          plat.moveDir = 1;
+        } else if (plat.x >= plat.moveMaxX) {
+          plat.x = plat.moveMaxX;
+          plat.moveDir = -1;
+        }
+        if (state.player.grounded && state.player.lastPlatformId === plat.id) {
+          state.player.x = clamp(
+            state.player.x + plat.x - oldX,
+            WALL_WIDTH + state.player.w / 2,
+            W - WALL_WIDTH - state.player.w / 2
+          );
+        }
+      }
       if (plat.hidden) {
         const y = screenY(plat.y);
         if (y > EXTRA_PLATFORM_REVEAL_TRIGGER_Y && y < H + 40) {
@@ -1707,7 +1758,8 @@
       const isSpike = plat.kind === 'spike';
       const isExtra = plat.kind === 'extra';
       const isCracked = plat.kind === 'cracked';
-      const landed = plat.touched && !isBoost && !isStart && !isMilestone && !isSpike && !isExtra && !isCracked;
+      const isMoving = plat.kind === 'moving';
+      const landed = plat.touched && !isBoost && !isStart && !isMilestone && !isSpike && !isExtra && !isCracked && !isMoving;
       const popT = plat.pop > 0 ? 1 - plat.pop / .32 : 1;
       const popScale = plat.pop > 0 ? .55 + Math.sin(popT * Math.PI * .5) * .45 : 1;
       const crumbleProgress = isCracked && plat.crumbleTimer > 0 ? 1 - plat.crumbleTimer / CRACKED_PLATFORM_BREAK_DELAY : 0;
@@ -1718,16 +1770,16 @@
       const levelUnderside = levelColorAt(plat.y, .24, -22);
 
       ctx.save();
-      if (landed || isBoost || isMilestone || isSpike || isExtra || isCracked) {
-        ctx.shadowColor = isMilestone ? isLevelMarker ? levelShadow : 'rgba(255,224,138,.36)' : isBoost ? 'rgba(255,224,138,.8)' : isSpike ? 'rgba(255,78,94,.55)' : isExtra ? 'rgba(195,150,255,.6)' : isCracked ? levelColorAt(plat.y, .32, -4) : levelShadow;
-        ctx.shadowBlur = isMilestone ? isLevelMarker ? 20 : 14 : isBoost ? 18 : isSpike ? 12 : isExtra ? 16 : isCracked ? 8 : 10;
+      if (landed || isBoost || isMilestone || isSpike || isExtra || isCracked || isMoving) {
+        ctx.shadowColor = isMilestone ? isLevelMarker ? levelShadow : 'rgba(255,224,138,.36)' : isBoost ? 'rgba(255,224,138,.8)' : isSpike ? 'rgba(255,78,94,.55)' : isExtra ? 'rgba(195,150,255,.6)' : isCracked ? levelColorAt(plat.y, .32, -4) : isMoving ? 'rgba(126,232,212,.64)' : levelShadow;
+        ctx.shadowBlur = isMilestone ? isLevelMarker ? 20 : 14 : isBoost ? 18 : isSpike ? 12 : isExtra ? 16 : isCracked ? 8 : isMoving ? 14 : 10;
       }
       ctx.globalAlpha = (plat.pop > 0 ? .62 + popT * .38 : 1) * (isCracked && plat.crumbleTimer > 0 ? 1 - crumbleProgress * .45 : 1);
       ctx.translate(x + plat.w / 2, y + plat.h / 2);
       if (isCracked && plat.crumbleTimer > 0) ctx.translate(rand(-1, 1) * crumbleProgress * 2.2, rand(-1, 1) * crumbleProgress * 1.4);
       ctx.scale(popScale, popScale);
       ctx.translate(-x - plat.w / 2, -y - plat.h / 2);
-      ctx.fillStyle = isMilestone ? isLevelMarker ? levelBright : 'rgba(255,224,138,.9)' : landed ? levelBright : isStart ? 'rgba(255,255,255,.22)' : isBoost ? 'rgba(255,224,138,.92)' : isSpike ? 'rgba(255,78,94,.88)' : isExtra ? 'rgba(196,168,255,.9)' : isCracked ? levelColorAt(plat.y, .78, -6) : levelFill;
+      ctx.fillStyle = isMilestone ? isLevelMarker ? levelBright : 'rgba(255,224,138,.9)' : landed ? levelBright : isStart ? 'rgba(255,255,255,.22)' : isBoost ? 'rgba(255,224,138,.92)' : isSpike ? 'rgba(255,78,94,.88)' : isExtra ? 'rgba(196,168,255,.9)' : isCracked ? levelColorAt(plat.y, .78, -6) : isMoving ? 'rgba(126,232,212,.9)' : levelFill;
       roundRect(ctx, x, y, plat.w, plat.h, radius);
       ctx.fill();
 
@@ -1747,8 +1799,24 @@
         ctx.fillStyle = 'rgba(80,4,18,.28)';
         ctx.fillRect(x + 8, y + plat.h - 4, plat.w - 16, 3);
       } else {
-        ctx.fillStyle = isBoost || (isMilestone && !isLevelMarker) ? 'rgba(90,50,0,.18)' : isExtra ? 'rgba(40,18,70,.22)' : isMilestone && isLevelMarker ? levelUnderside : 'rgba(0,0,0,.16)';
+        ctx.fillStyle = isBoost || (isMilestone && !isLevelMarker) ? 'rgba(90,50,0,.18)' : isExtra ? 'rgba(40,18,70,.22)' : isMoving ? 'rgba(4,42,48,.26)' : isMilestone && isLevelMarker ? levelUnderside : 'rgba(0,0,0,.16)';
         ctx.fillRect(x + 8, y + plat.h - 4, plat.w - 16, 3);
+
+        if (isMoving) {
+          const pulse = .5 + Math.sin(state.time * 5 + plat.id) * .5;
+          const arrowY = y + plat.h / 2;
+          ctx.strokeStyle = `rgba(5,42,48,${.48 + pulse * .22})`;
+          ctx.lineWidth = 2;
+          ctx.lineCap = 'round';
+          for (const offset of [-18, 0, 18]) {
+            const arrowX = x + plat.w / 2 + offset;
+            ctx.beginPath();
+            ctx.moveTo(arrowX - 5 * plat.moveDir, arrowY - 4);
+            ctx.lineTo(arrowX + 5 * plat.moveDir, arrowY);
+            ctx.lineTo(arrowX - 5 * plat.moveDir, arrowY + 4);
+            ctx.stroke();
+          }
+        }
 
         if (isCracked) {
           ctx.strokeStyle = plat.crumbleTimer > 0 ? 'rgba(5,25,25,.74)' : 'rgba(5,25,25,.48)';
