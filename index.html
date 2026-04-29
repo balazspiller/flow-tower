@@ -934,6 +934,10 @@
       facing: 1,
       squash: 0,
       huePulse: 0,
+      idleStartTime: 0,
+      idleLook: 0,
+      idleLookTarget: 0,
+      idleLookTimer: 0,
       flip: 0,
       flipSpeed: 0,
       flipDir: 1
@@ -1521,6 +1525,27 @@
 
     if (p.grounded) p.coyote = .09;
 
+    const idleOnStart =
+      p.grounded &&
+      !state.cameraStarted &&
+      p.lastPlatformY === 0 &&
+      input === 0 &&
+      Math.abs(p.vx) < 8;
+    p.idleStartTime = idleOnStart ? p.idleStartTime + dt : 0;
+    if (idleOnStart && p.idleStartTime > 1.2) {
+      p.idleLookTimer -= dt;
+      if (p.idleLookTimer <= 0) {
+        const choices = [-3.5, -2.2, 0, 0, 0, 2.2, 3.5];
+        p.idleLookTarget = choices[Math.floor(Math.random() * choices.length)];
+        p.idleLookTimer = p.idleLookTarget === 0 ? rand(1.2, 2.6) : rand(.75, 1.7);
+      }
+      p.idleLook = lerp(p.idleLook, p.idleLookTarget, 1 - Math.pow(.02, dt));
+    } else {
+      p.idleLook = lerp(p.idleLook, 0, 1 - Math.pow(.01, dt));
+      p.idleLookTarget = 0;
+      p.idleLookTimer = 0;
+    }
+
     if (state.comboTimer > 0) {
       state.comboTimer -= dt;
       if (state.comboTimer <= 0) breakCombo();
@@ -1981,10 +2006,12 @@
     const flipProgress = p.flip > 0 ? 1 - p.flip : 0;
     const easedFlip = flipProgress * flipProgress * (3 - 2 * flipProgress);
     const flipAngle = p.flip > 0 ? p.flipDir * easedFlip * Math.PI * 2 : 0;
-    drawPlayerShape(p.x, y, p.w * sx, p.h * sy, p.facing, fill, state.flow + overdrive, false, flipAngle);
+    const blinkAge = p.idleStartTime - 5;
+    const blinkPulse = blinkAge > 0 ? Math.max(0, 1 - Math.abs((blinkAge % 2.8) - .075) / .075) : 0;
+    drawPlayerShape(p.x, y, p.w * sx, p.h * sy, p.facing, fill, state.flow + overdrive, false, flipAngle, blinkPulse, p.idleLook);
   }
 
-  function drawPlayerShape(x, y, w, h, facing, fill, flow, ghost, flipAngle = 0) {
+  function drawPlayerShape(x, y, w, h, facing, fill, flow, ghost, flipAngle = 0, blink = 0, eyeLook = 0) {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(flipAngle + clamp(state.player ? state.player.vx / 1600 : 0, -.22, .22));
@@ -2000,10 +2027,24 @@
 
     if (!ghost) {
       ctx.fillStyle = '#101826';
-      ctx.beginPath();
-      ctx.arc(-5 + facing * 4, -8, 3, 0, Math.PI * 2);
-      ctx.arc(8 + facing * 4, -8, 3, 0, Math.PI * 2);
-      ctx.fill();
+      const leftEyeX = -5 + facing * 4 + eyeLook;
+      const rightEyeX = 8 + facing * 4 + eyeLook;
+      if (blink > .15) {
+        ctx.strokeStyle = '#101826';
+        ctx.lineWidth = 2.6;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(leftEyeX - 3, -8);
+        ctx.lineTo(leftEyeX + 3, -8);
+        ctx.moveTo(rightEyeX - 3, -8);
+        ctx.lineTo(rightEyeX + 3, -8);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(leftEyeX, -8, 3, 0, Math.PI * 2);
+        ctx.arc(rightEyeX, -8, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       ctx.strokeStyle = 'rgba(16,24,38,.7)';
       ctx.lineWidth = 3;
