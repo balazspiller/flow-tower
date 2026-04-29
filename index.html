@@ -712,6 +712,11 @@
       setTimeout(() => this.tone(720, .075, 'triangle', .038), 45);
       setTimeout(() => this.tone(1080, .09, 'sine', .034), 95);
     },
+    firework() {
+      this.tone(420, .06, 'triangle', .032);
+      setTimeout(() => this.tone(720, .08, 'sine', .03), 45);
+      setTimeout(() => this.tone(980, .1, 'triangle', .026), 110);
+    },
     fail() { this.tone(80, .28, 'sawtooth', .04); }
   };
 
@@ -737,10 +742,12 @@
     spikePlatformCooldown: 0,
     crackedPlatformCooldown: 0,
     movingPlatformCooldown: 0,
+    fireworkMilestone: 0,
     platformCursorY: 0,
     nextMilestoneHeight: MILESTONE_HEIGHT_STEP,
     platforms: [],
     particles: [],
+    fireworkBursts: [],
     afterImages: [],
     player: null
   };
@@ -1051,9 +1058,11 @@
     state.spikePlatformCooldown = 0;
     state.crackedPlatformCooldown = 0;
     state.movingPlatformCooldown = 0;
+    state.fireworkMilestone = 0;
     state.platforms = [];
     state.nextMilestoneHeight = MILESTONE_HEIGHT_STEP;
     state.particles = [];
+    state.fireworkBursts = [];
     state.afterImages = [];
     state.player = makePlayer();
 
@@ -1258,6 +1267,45 @@
     audio.power();
   }
 
+  function launchMilestoneFireworks(height) {
+    const milestoneY = clamp(screenY(-height * 10), 88, H * .62);
+    const palette = [
+      levelHue(Math.floor(height / LEVEL_HEIGHT_STEP)),
+      (state.time * 120 + height * .19) % 360,
+      44,
+      194
+    ];
+    const bursts = [
+      { x: W * .26, y: milestoneY - 30, n: 24, hue: palette[0] },
+      { x: W * .74, y: milestoneY - 56, n: 24, hue: palette[1] },
+      { x: W * .5, y: Math.max(80, milestoneY - 96), n: 32, hue: palette[2] },
+      { x: state.player.x, y: clamp(screenY(state.player.y) - 48, 90, H * .68), n: 18, hue: palette[3] }
+    ];
+
+    state.shake = Math.max(state.shake, .55);
+    for (const burstInfo of bursts) {
+      burst(burstInfo.x, burstInfo.y, burstInfo.n, 'firework', burstInfo.hue);
+      state.fireworkBursts.push({
+        x: burstInfo.x,
+        y: burstInfo.y,
+        hue: burstInfo.hue,
+        life: .46,
+        maxLife: .46,
+        rays: burstInfo.n > 24 ? 16 : 12,
+        radius: burstInfo.n > 24 ? 112 : 86
+      });
+    }
+    audio.firework();
+  }
+
+  function checkFireworkMilestones() {
+    const reached = Math.floor(state.maxHeight / LEVEL_HEIGHT_STEP) * LEVEL_HEIGHT_STEP;
+    while (reached >= LEVEL_HEIGHT_STEP && state.fireworkMilestone < reached) {
+      state.fireworkMilestone += LEVEL_HEIGHT_STEP;
+      launchMilestoneFireworks(state.fireworkMilestone);
+    }
+  }
+
   function checkPowerUps() {
     const p = state.player;
     for (const plat of state.platforms) {
@@ -1279,20 +1327,28 @@
     }
   }
 
-  function burst(x, y, n, type = 'dust') {
+  function burst(x, y, n, type = 'dust', hue = null) {
     const overdriveIntensity = type === 'overdrive' ? comboOverdrive() : 1;
     for (let i = 0; i < n; i++) {
       const a = rand(0, Math.PI * 2);
-      const isHighEnergy = type === 'flow' || type === 'spring' || type === 'overdrive';
-      const sp = type === 'overdrive' ? rand(120, 300 + overdriveIntensity * 260) : isHighEnergy ? rand(90, 380) : rand(40, 170);
+      const isFirework = type === 'firework';
+      const isHighEnergy = type === 'flow' || type === 'spring' || type === 'overdrive' || isFirework;
+      const sp = isFirework ? rand(120, 390) : type === 'overdrive' ? rand(120, 300 + overdriveIntensity * 260) : isHighEnergy ? rand(90, 380) : rand(40, 170);
+      const fireworkHue = hue === null ? rand(0, 360) : hue + rand(-18, 18);
+      const life = isFirework ? rand(.5, .86) : type === 'overdrive' ? rand(.22, .42 + overdriveIntensity * .58) : isHighEnergy ? rand(.35, .8) : rand(.18, .45);
       state.particles.push({
         x, y,
+        lastX: x,
+        lastY: y,
         vx: Math.cos(a) * sp,
-        vy: type === 'spring' || type === 'overdrive' ? -rand(120, 260 + overdriveIntensity * 260) - Math.abs(Math.sin(a)) * sp : Math.sin(a) * sp - rand(10, 90),
-        life: type === 'overdrive' ? rand(.22, .42 + overdriveIntensity * .58) : isHighEnergy ? rand(.35, .8) : rand(.18, .45),
-        maxLife: type === 'overdrive' ? 1 : isHighEnergy ? .8 : .45,
-        size: type === 'overdrive' ? rand(1.5, 2.5 + overdriveIntensity * 5.5) : isHighEnergy ? rand(2, 6) : rand(1, 4),
-        alpha: type === 'overdrive' ? .12 + overdriveIntensity * .88 : 1,
+        vy: isFirework ? Math.sin(a) * sp * .86 - rand(18, 74) : type === 'spring' || type === 'overdrive' ? -rand(120, 260 + overdriveIntensity * 260) - Math.abs(Math.sin(a)) * sp : Math.sin(a) * sp - rand(10, 90),
+        life,
+        maxLife: life,
+        size: isFirework ? rand(1.4, 3.4) : type === 'overdrive' ? rand(1.5, 2.5 + overdriveIntensity * 5.5) : isHighEnergy ? rand(2, 6) : rand(1, 4),
+        alpha: type === 'overdrive' ? .12 + overdriveIntensity * .88 : isFirework ? rand(.75, 1) : 1,
+        hue: isFirework ? fireworkHue : null,
+        gravity: isFirework ? rand(95, 180) : 500,
+        drag: isFirework ? .22 : .08,
         type
       });
     }
@@ -1560,6 +1616,7 @@
 
     const height = Math.max(0, Math.floor(-p.y / 10));
     state.maxHeight = Math.max(state.maxHeight, height);
+    checkFireworkMilestones();
     state.score = Math.max(state.score, state.maxHeight * 10 + state.combo * 120);
     syncRunStats();
 
@@ -1582,6 +1639,7 @@
     }
 
     updateParticles(dt);
+    updateFireworkBursts(dt);
     updateAfterImages(dt);
     updatePlatforms(dt);
     generatePlatforms();
@@ -1610,12 +1668,19 @@
   function updateParticles(dt) {
     for (const part of state.particles) {
       part.life -= dt;
+      part.lastX = part.x;
+      part.lastY = part.y;
       part.x += part.vx * dt;
       part.y += part.vy * dt;
-      part.vy += 500 * dt;
-      part.vx *= Math.pow(.08, dt);
+      part.vy += (part.gravity ?? 500) * dt;
+      part.vx *= Math.pow(part.drag ?? .08, dt);
     }
     state.particles = state.particles.filter(p => p.life > 0);
+  }
+
+  function updateFireworkBursts(dt) {
+    for (const burstInfo of state.fireworkBursts) burstInfo.life -= dt;
+    state.fireworkBursts = state.fireworkBursts.filter(b => b.life > 0);
   }
 
   function updateAfterImages(dt) {
@@ -1683,6 +1748,7 @@
     drawParticles(false);
     drawPlayerTrails();
     drawPlayer();
+    drawFireworkBursts();
     drawParticles(true);
     ctx.restore();
     drawSlowOverlay();
@@ -2105,11 +2171,22 @@
   function drawParticles(foreground) {
     for (const part of state.particles) {
       const y = part.y;
-      if (foreground !== (part.type === 'flow' || part.type === 'spring' || part.type === 'overdrive')) continue;
+      if (foreground !== (part.type === 'flow' || part.type === 'spring' || part.type === 'overdrive' || part.type === 'firework')) continue;
       const a = clamp(part.life / part.maxLife, 0, 1);
       ctx.save();
       ctx.globalAlpha = a * (part.alpha || 1);
-      ctx.fillStyle = part.type === 'overdrive' ? `hsl(${(state.time * 190 + part.x) % 360}, 100%, 68%)` : part.type === 'platform' ? 'rgba(196,168,255,.92)' : part.type === 'crack' ? 'rgba(126,232,212,.86)' : part.type === 'flow' || part.type === 'spring' ? 'rgba(255,224,138,.95)' : part.type === 'slow' ? 'rgba(138,232,255,.9)' : 'rgba(220,235,255,.62)';
+      ctx.fillStyle = part.type === 'firework' ? `hsl(${part.hue}, 96%, ${62 + a * 24}%)` : part.type === 'overdrive' ? `hsl(${(state.time * 190 + part.x) % 360}, 100%, 68%)` : part.type === 'platform' ? 'rgba(196,168,255,.92)' : part.type === 'crack' ? 'rgba(126,232,212,.86)' : part.type === 'flow' || part.type === 'spring' ? 'rgba(255,224,138,.95)' : part.type === 'slow' ? 'rgba(138,232,255,.9)' : 'rgba(220,235,255,.62)';
+      if (part.type === 'firework') {
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.lineWidth = Math.max(1, part.size * .55);
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = a * .72 * (part.alpha || 1);
+        ctx.beginPath();
+        ctx.moveTo(part.lastX ?? part.x, part.lastY ?? part.y);
+        ctx.lineTo(part.x, part.y);
+        ctx.stroke();
+        ctx.globalAlpha = a * (part.alpha || 1);
+      }
       ctx.beginPath();
       ctx.arc(part.x, part.y, part.size * a, 0, Math.PI * 2);
       ctx.fill();
@@ -2123,6 +2200,39 @@
       }
       ctx.restore();
     }
+  }
+
+  function drawFireworkBursts() {
+    if (!state.fireworkBursts.length) return;
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const burstInfo of state.fireworkBursts) {
+      const t = 1 - burstInfo.life / burstInfo.maxLife;
+      const fade = 1 - t;
+      const radius = burstInfo.radius * (.18 + t * .92);
+      const color = `hsla(${burstInfo.hue}, 98%, ${70 + fade * 18}%, ${fade})`;
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3 * fade + .7;
+      ctx.globalAlpha = .54 * fade;
+      ctx.beginPath();
+      ctx.arc(burstInfo.x, burstInfo.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.globalAlpha = .72 * fade;
+      ctx.lineWidth = 2.2 * fade + .5;
+      for (let i = 0; i < burstInfo.rays; i++) {
+        const a = (Math.PI * 2 * i) / burstInfo.rays + burstInfo.hue * .017;
+        const inner = radius * .34;
+        const outer = radius * (1.02 + (i % 3) * .08);
+        ctx.beginPath();
+        ctx.moveTo(burstInfo.x + Math.cos(a) * inner, burstInfo.y + Math.sin(a) * inner);
+        ctx.lineTo(burstInfo.x + Math.cos(a) * outer, burstInfo.y + Math.sin(a) * outer);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   function roundRect(c, x, y, w, h, r) {
