@@ -1771,15 +1771,15 @@
 
       ctx.save();
       if (landed || isBoost || isMilestone || isSpike || isExtra || isCracked || isMoving) {
-        ctx.shadowColor = isMilestone ? isLevelMarker ? levelShadow : 'rgba(255,224,138,.36)' : isBoost ? 'rgba(255,224,138,.8)' : isSpike ? 'rgba(255,78,94,.55)' : isExtra ? 'rgba(195,150,255,.6)' : isCracked ? levelColorAt(plat.y, .32, -4) : isMoving ? 'rgba(126,232,212,.64)' : levelShadow;
-        ctx.shadowBlur = isMilestone ? isLevelMarker ? 20 : 14 : isBoost ? 18 : isSpike ? 12 : isExtra ? 16 : isCracked ? 8 : isMoving ? 14 : 10;
+        ctx.shadowColor = isMilestone ? isLevelMarker ? levelShadow : 'rgba(255,224,138,.36)' : isBoost ? 'rgba(255,224,138,.8)' : isSpike ? 'rgba(255,78,94,.55)' : isExtra ? 'rgba(195,150,255,.6)' : isCracked ? levelColorAt(plat.y, .32, -4) : levelShadow;
+        ctx.shadowBlur = isMilestone ? isLevelMarker ? 20 : 14 : isBoost ? 18 : isSpike ? 12 : isExtra ? 16 : isCracked ? 8 : 10;
       }
       ctx.globalAlpha = (plat.pop > 0 ? .62 + popT * .38 : 1) * (isCracked && plat.crumbleTimer > 0 ? 1 - crumbleProgress * .45 : 1);
       ctx.translate(x + plat.w / 2, y + plat.h / 2);
       if (isCracked && plat.crumbleTimer > 0) ctx.translate(rand(-1, 1) * crumbleProgress * 2.2, rand(-1, 1) * crumbleProgress * 1.4);
       ctx.scale(popScale, popScale);
       ctx.translate(-x - plat.w / 2, -y - plat.h / 2);
-      ctx.fillStyle = isMilestone ? isLevelMarker ? levelBright : 'rgba(255,224,138,.9)' : landed ? levelBright : isStart ? 'rgba(255,255,255,.22)' : isBoost ? 'rgba(255,224,138,.92)' : isSpike ? 'rgba(255,78,94,.88)' : isExtra ? 'rgba(196,168,255,.9)' : isCracked ? levelColorAt(plat.y, .78, -6) : isMoving ? 'rgba(126,232,212,.9)' : levelFill;
+      ctx.fillStyle = isMilestone ? isLevelMarker ? levelBright : 'rgba(255,224,138,.9)' : landed ? levelBright : isStart ? 'rgba(255,255,255,.22)' : isBoost ? 'rgba(255,224,138,.92)' : isSpike ? 'rgba(255,78,94,.88)' : isExtra ? 'rgba(196,168,255,.9)' : isCracked ? levelColorAt(plat.y, .78, -6) : levelFill;
       roundRect(ctx, x, y, plat.w, plat.h, radius);
       ctx.fill();
 
@@ -1799,7 +1799,7 @@
         ctx.fillStyle = 'rgba(80,4,18,.28)';
         ctx.fillRect(x + 8, y + plat.h - 4, plat.w - 16, 3);
       } else {
-        ctx.fillStyle = isBoost || (isMilestone && !isLevelMarker) ? 'rgba(90,50,0,.18)' : isExtra ? 'rgba(40,18,70,.22)' : isMoving ? 'rgba(4,42,48,.26)' : isMilestone && isLevelMarker ? levelUnderside : 'rgba(0,0,0,.16)';
+        ctx.fillStyle = isBoost || (isMilestone && !isLevelMarker) ? 'rgba(90,50,0,.18)' : isExtra ? 'rgba(40,18,70,.22)' : isMilestone && isLevelMarker ? levelUnderside : 'rgba(0,0,0,.16)';
         ctx.fillRect(x + 8, y + plat.h - 4, plat.w - 16, 3);
 
         if (isMoving) {
