@@ -115,7 +115,11 @@
   }
 
   .combo.hot { transform: scale(1.08); }
-  .combo .big { color: var(--hot); }
+  .combo .big {
+    color: var(--combo-color, var(--hot));
+    text-shadow: var(--combo-glow, none);
+    transition: color .12s ease, text-shadow .12s ease;
+  }
 
   .power {
     justify-self: center;
@@ -1564,6 +1568,16 @@
     heightText.textContent = String(state.maxHeight);
     comboText.textContent = `x${state.combo}`;
     comboCard.classList.toggle('hot', state.combo >= FLOW_COMBO_THRESHOLD);
+    const comboTint = comboOverdrive();
+    if (comboTint > 0) {
+      const hue = (state.time * 150 + state.combo * 15) % 360;
+      const tint = `hsl(${hue}, ${60 + comboTint * 40}%, ${72 - comboTint * 10}%)`;
+      comboText.style.setProperty('--combo-color', `color-mix(in srgb, var(--hot) ${Math.round((1 - comboTint) * 100)}%, ${tint} ${Math.round(comboTint * 100)}%)`);
+      comboText.style.setProperty('--combo-glow', `0 0 ${Math.round(8 + comboTint * 18)}px hsla(${hue}, ${70 + comboTint * 25}%, 62%, ${.18 + comboTint * .46})`);
+    } else {
+      comboText.style.removeProperty('--combo-color');
+      comboText.style.removeProperty('--combo-glow');
+    }
     powerFill.style.transform = `scaleX(${clamp(state.slowTime / state.slowTimeDuration, 0, 1)})`;
     powerCard.classList.toggle('hidden', state.slowTime <= 0);
   }
