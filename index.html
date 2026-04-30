@@ -494,6 +494,7 @@
   const rand = (min, max) => min + Math.random() * (max - min);
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
   const lerp = (a, b, t) => a + (b - a) * t;
+  const DEBUG_CHEATS = false;
   const FLOW_COMBO_THRESHOLD = 5;
   const OVERDRIVE_COMBO_THRESHOLD = 20;
   const OVERDRIVE_FULL_COMBO = 30;
@@ -735,6 +736,7 @@
     flow: 0,
     slowTime: 0,
     slowTimeDuration: SLOW_TIME_DURATION,
+    debugSlowTime: false,
     slowPulse: 0,
     shake: 0,
     pause: false,
@@ -1051,6 +1053,7 @@
     state.flow = 0;
     state.slowTime = 0;
     state.slowTimeDuration = SLOW_TIME_DURATION;
+    state.debugSlowTime = false;
     state.slowPulse = 0;
     state.shake = 0;
     state.pause = false;
@@ -1216,6 +1219,24 @@
     state.shake = Math.max(state.shake, .45);
     burst(x, y, 58, 'spring');
     audio.spring();
+  }
+
+  function activateDebugSpringCheat() {
+    if (!DEBUG_CHEATS || state.mode !== 'playing' || state.pause || !state.player) return;
+    const p = state.player;
+    activateSpring(p.x + p.w * .5, screenY(p.y + p.h * .5));
+  }
+
+  function toggleDebugSlowTimeCheat() {
+    if (!DEBUG_CHEATS || state.mode !== 'playing' || state.pause || !state.player) return;
+    state.debugSlowTime = !state.debugSlowTime;
+    if (state.debugSlowTime) {
+      const p = state.player;
+      activateSlowTime(p.x + p.w * .5, screenY(p.y + p.h * .5));
+      state.slowTime = state.slowTimeDuration;
+    } else {
+      state.slowTime = 0;
+    }
   }
 
   function nextPlatformId() {
@@ -1440,7 +1461,7 @@
 
   function update(rawDt) {
     if (state.mode !== 'playing' || state.pause) return;
-    state.slowTime = Math.max(0, state.slowTime - rawDt);
+    state.slowTime = state.debugSlowTime ? state.slowTimeDuration : Math.max(0, state.slowTime - rawDt);
     const overdrive = comboOverdrive();
     const overdriveTimeScale = lerp(1, OVERDRIVE_TIME_SCALE, overdrive);
     const timeScale = (state.slowTime > 0 ? SLOW_TIME_SCALE : 1) * overdriveTimeScale;
@@ -2360,6 +2381,8 @@
       return;
     }
     if (e.code === 'Space' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') requestJump();
+    if (e.code === 'KeyQ' && !e.repeat) toggleDebugSlowTimeCheat();
+    if (e.code === 'KeyE' && !e.repeat) activateDebugSpringCheat();
     if (e.key === 'r' || e.key === 'R') {
       audio.init();
       resetGame();
