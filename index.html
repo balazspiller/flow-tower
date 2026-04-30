@@ -349,6 +349,84 @@
     font-weight: 750;
   }
 
+  .settings-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 12px;
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 14px;
+    background: rgba(255,255,255,.06);
+  }
+
+  .setting-label {
+    display: block;
+    color: var(--text);
+    font-weight: 750;
+  }
+
+  .setting-description {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .toggle-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .toggle-control {
+    flex: 0 0 auto;
+    position: relative;
+    width: 56px;
+    height: 32px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.16);
+    background: rgba(255,255,255,.1);
+    box-shadow: inset 0 1px 4px rgba(0,0,0,.28);
+    cursor: pointer;
+    transition: background .16s ease, border-color .16s ease;
+  }
+
+  .toggle-control::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(238,244,255,.92);
+    box-shadow: 0 3px 10px rgba(0,0,0,.3);
+    transition: transform .16s ease;
+  }
+
+  .toggle-input:checked + .toggle-control {
+    border-color: rgba(138,232,255,.44);
+    background: rgba(138,232,255,.38);
+  }
+
+  .toggle-input:checked + .toggle-control::after {
+    transform: translateX(24px);
+    background: #effcff;
+  }
+
+  .toggle-input:focus-visible + .toggle-control {
+    outline: 2px solid rgba(138,232,255,.9);
+    outline-offset: 3px;
+  }
+
   @media (max-width: 860px) {
     .hud { padding: 12px; }
     .hud-card { padding: 8px 10px; border-radius: 14px; }
@@ -392,6 +470,7 @@
       </div>
       <div class="screen-tools" id="screenTools">
         <button class="screen-tool-button" id="statsButton" type="button" aria-label="Show stats" aria-haspopup="dialog" aria-expanded="false">#</button>
+        <button class="screen-tool-button" id="settingsButton" type="button" aria-label="Show settings" aria-haspopup="dialog" aria-expanded="false">&#9881;</button>
         <button class="screen-tool-button" id="helpButton" type="button" aria-label="Show controls and help" aria-haspopup="dialog" aria-expanded="false">?</button>
       </div>
 
@@ -456,6 +535,41 @@
         </section>
       </div>
     </div>
+
+    <div class="modal hidden" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="modal-panel">
+        <button class="modal-close" id="settingsCloseButton" type="button" aria-label="Close settings">&times;</button>
+        <section class="modal-section">
+          <h2 id="settingsTitle">Settings</h2>
+          <div class="settings-list">
+            <label class="setting-row">
+              <span>
+                <span class="setting-label">Speed lines</span>
+                <span class="setting-description">Flow streaks and slow-time motion lines.</span>
+              </span>
+              <input class="toggle-input" id="speedLinesToggle" type="checkbox">
+              <span class="toggle-control" aria-hidden="true"></span>
+            </label>
+            <label class="setting-row">
+              <span>
+                <span class="setting-label">Camera shake</span>
+                <span class="setting-description">Impact motion on landings, rebounds, and hazards.</span>
+              </span>
+              <input class="toggle-input" id="cameraShakeToggle" type="checkbox">
+              <span class="toggle-control" aria-hidden="true"></span>
+            </label>
+            <label class="setting-row">
+              <span>
+                <span class="setting-label">Particles</span>
+                <span class="setting-description">Dust, sparks, cracks, spring bursts, and fireworks.</span>
+              </span>
+              <input class="toggle-input" id="particlesToggle" type="checkbox">
+              <span class="toggle-control" aria-hidden="true"></span>
+            </label>
+          </div>
+        </section>
+      </div>
+    </div>
   </main>
 
 <script>
@@ -483,12 +597,19 @@
   const statsButton = document.getElementById('statsButton');
   const statsModal = document.getElementById('statsModal');
   const statsCloseButton = document.getElementById('statsCloseButton');
+  const settingsButton = document.getElementById('settingsButton');
+  const settingsModal = document.getElementById('settingsModal');
+  const settingsCloseButton = document.getElementById('settingsCloseButton');
+  const speedLinesToggle = document.getElementById('speedLinesToggle');
+  const cameraShakeToggle = document.getElementById('cameraShakeToggle');
+  const particlesToggle = document.getElementById('particlesToggle');
   const statsHighlights = document.getElementById('statsHighlights');
   const powerupStats = document.getElementById('powerupStats');
   const recordStats = document.getElementById('recordStats');
   const runStats = document.getElementById('runStats');
   let pauseBeforeHelp = false;
   let pauseBeforeStats = false;
+  let pauseBeforeSettings = false;
 
   const keys = new Set();
   const rand = (min, max) => min + Math.random() * (max - min);
@@ -549,11 +670,45 @@
   const SWIPE_UP_JUMP_MIN = 34;
   const TOUCH_DIR_HOLD = .14;
   const STATS_STORAGE_KEY = 'flowTower.stats.v1';
+  const SETTINGS_STORAGE_KEY = 'flowTower.settings.v1';
+  const DEFAULT_SETTINGS = {
+    speedLines: true,
+    cameraShake: true,
+    particles: true
+  };
   const POWERUP_LABELS = {
     slow: 'Hourglasses',
     spring: 'Springs',
     platforms: 'Beacons'
   };
+
+  function loadSettings() {
+    try {
+      const value = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY));
+      if (!value || typeof value !== 'object') return { ...DEFAULT_SETTINGS };
+      return {
+        speedLines: value.speedLines !== false,
+        cameraShake: value.cameraShake !== false,
+        particles: value.particles !== false
+      };
+    } catch (_) {
+      return { ...DEFAULT_SETTINGS };
+    }
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    } catch (_) {
+      // Settings stay active for the current page session if storage is unavailable.
+    }
+  }
+
+  function syncSettingsControls() {
+    speedLinesToggle.checked = settings.speedLines;
+    cameraShakeToggle.checked = settings.cameraShake;
+    particlesToggle.checked = settings.particles;
+  }
 
   function makeEmptyStats() {
     return {
@@ -643,6 +798,7 @@
   }
 
   const stats = loadStats();
+  const settings = loadSettings();
   let runStatsCurrent = makeRunStats();
 
   const touchInput = {
@@ -1306,15 +1462,17 @@
     state.shake = Math.max(state.shake, .55);
     for (const burstInfo of bursts) {
       burst(burstInfo.x, burstInfo.y, burstInfo.n, 'firework', burstInfo.hue);
-      state.fireworkBursts.push({
-        x: burstInfo.x,
-        y: burstInfo.y,
-        hue: burstInfo.hue,
-        life: .46,
-        maxLife: .46,
-        rays: burstInfo.n > 24 ? 16 : 12,
-        radius: burstInfo.n > 24 ? 112 : 86
-      });
+      if (settings.particles) {
+        state.fireworkBursts.push({
+          x: burstInfo.x,
+          y: burstInfo.y,
+          hue: burstInfo.hue,
+          life: .46,
+          maxLife: .46,
+          rays: burstInfo.n > 24 ? 16 : 12,
+          radius: burstInfo.n > 24 ? 112 : 86
+        });
+      }
     }
     audio.firework();
   }
@@ -1349,6 +1507,7 @@
   }
 
   function burst(x, y, n, type = 'dust', hue = null) {
+    if (!settings.particles) return;
     const overdriveIntensity = type === 'overdrive' ? comboOverdrive() : 1;
     for (let i = 0; i < n; i++) {
       const a = rand(0, Math.PI * 2);
@@ -1756,8 +1915,8 @@
   }
 
   function draw() {
-    const shakeX = state.shake ? rand(-state.shake, state.shake) * 8 : 0;
-    const shakeY = state.shake ? rand(-state.shake, state.shake) * 8 : 0;
+    const shakeX = settings.cameraShake && state.shake ? rand(-state.shake, state.shake) * 8 : 0;
+    const shakeY = settings.cameraShake && state.shake ? rand(-state.shake, state.shake) * 8 : 0;
 
     ctx.save();
     ctx.translate(shakeX, shakeY);
@@ -1838,6 +1997,7 @@
   }
 
   function drawSpeedLines() {
+    if (!settings.speedLines) return;
     if (state.flow <= .02 && state.slowPulse <= .02) return;
     const p = state.player;
     const speed = Math.abs(p.vx);
@@ -2190,6 +2350,7 @@
   }
 
   function drawParticles(foreground) {
+    if (!settings.particles) return;
     for (const part of state.particles) {
       const y = part.y;
       if (foreground !== (part.type === 'flow' || part.type === 'spring' || part.type === 'overdrive' || part.type === 'firework')) continue;
@@ -2224,6 +2385,7 @@
   }
 
   function drawFireworkBursts() {
+    if (!settings.particles) return;
     if (!state.fireworkBursts.length) return;
 
     ctx.save();
@@ -2302,15 +2464,23 @@
     return !statsModal.classList.contains('hidden');
   }
 
+  function settingsIsOpen() {
+    return !settingsModal.classList.contains('hidden');
+  }
+
   function setHelpButtonAvailable(available) {
     helpButton.hidden = !available;
     statsButton.hidden = !available;
+    settingsButton.hidden = !available;
     helpButton.tabIndex = available ? 0 : -1;
     statsButton.tabIndex = available ? 0 : -1;
+    settingsButton.tabIndex = available ? 0 : -1;
     helpButton.setAttribute('aria-hidden', available ? 'false' : 'true');
     statsButton.setAttribute('aria-hidden', available ? 'false' : 'true');
+    settingsButton.setAttribute('aria-hidden', available ? 'false' : 'true');
     if (!available && helpIsOpen()) closeHelp();
     if (!available && statsIsOpen()) closeStats();
+    if (!available && settingsIsOpen()) closeSettings();
   }
 
   function openHelp() {
@@ -2346,9 +2516,36 @@
     if (!statsButton.hidden) statsButton.focus();
   }
 
+  function openSettings() {
+    if (settingsButton.hidden) return;
+    syncSettingsControls();
+    pauseBeforeSettings = state.pause;
+    if (state.mode === 'playing') state.pause = true;
+    settingsModal.classList.remove('hidden');
+    settingsButton.setAttribute('aria-expanded', 'true');
+    settingsCloseButton.focus();
+  }
+
+  function closeSettings() {
+    settingsModal.classList.add('hidden');
+    settingsButton.setAttribute('aria-expanded', 'false');
+    if (state.mode === 'playing') state.pause = pauseBeforeSettings;
+    if (!settingsButton.hidden) settingsButton.focus();
+  }
+
+  function updateVisualSetting(key, enabled) {
+    settings[key] = enabled;
+    if (key === 'cameraShake' && !enabled) state.shake = 0;
+    if (key === 'particles' && !enabled) {
+      state.particles = [];
+      state.fireworkBursts = [];
+    }
+    saveSettings();
+  }
+
   function preventPageGesture(e) {
     const target = e.target instanceof Element ? e.target : e.target?.parentElement;
-    if ((helpIsOpen() || statsIsOpen()) && target?.closest('.modal-panel')) return;
+    if ((helpIsOpen() || statsIsOpen() || settingsIsOpen()) && target?.closest('.modal-panel')) return;
     e.preventDefault();
   }
 
@@ -2362,10 +2559,11 @@
 
   window.addEventListener('keydown', (e) => {
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space'].includes(e.code)) e.preventDefault();
-    if (helpIsOpen() || statsIsOpen()) {
+    if (helpIsOpen() || statsIsOpen() || settingsIsOpen()) {
       e.preventDefault();
       if (e.key === 'Escape' && helpIsOpen()) closeHelp();
       if (e.key === 'Escape' && statsIsOpen()) closeStats();
+      if (e.key === 'Escape' && settingsIsOpen()) closeSettings();
       return;
     }
     keys.add(e.key);
@@ -2404,11 +2602,19 @@
   helpCloseButton.addEventListener('click', closeHelp);
   statsButton.addEventListener('click', openStats);
   statsCloseButton.addEventListener('click', closeStats);
+  settingsButton.addEventListener('click', openSettings);
+  settingsCloseButton.addEventListener('click', closeSettings);
+  speedLinesToggle.addEventListener('change', () => updateVisualSetting('speedLines', speedLinesToggle.checked));
+  cameraShakeToggle.addEventListener('change', () => updateVisualSetting('cameraShake', cameraShakeToggle.checked));
+  particlesToggle.addEventListener('change', () => updateVisualSetting('particles', particlesToggle.checked));
   helpModal.addEventListener('click', (e) => {
     if (e.target === helpModal) closeHelp();
   });
   statsModal.addEventListener('click', (e) => {
     if (e.target === statsModal) closeStats();
+  });
+  settingsModal.addEventListener('click', (e) => {
+    if (e.target === settingsModal) closeSettings();
   });
 
   canvas.addEventListener('pointerdown', (e) => {
@@ -2454,6 +2660,7 @@
   resetGame();
   state.mode = 'menu';
   startOverlay.classList.remove('hidden');
+  syncSettingsControls();
   setHelpButtonAvailable(true);
   requestAnimationFrame(loop);
 })();
