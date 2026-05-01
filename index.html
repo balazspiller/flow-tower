@@ -450,6 +450,42 @@
     }
     .overlay { padding: 22px; }
   }
+
+  @media (max-width: 860px) and (orientation: portrait) {
+    .shell {
+      padding: 0;
+    }
+
+    .game-wrap {
+      width: 100vw;
+      height: 100dvh;
+      max-height: none;
+      aspect-ratio: auto;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .hud {
+      padding:
+        max(12px, env(safe-area-inset-top))
+        max(12px, env(safe-area-inset-right))
+        12px
+        max(12px, env(safe-area-inset-left));
+    }
+
+    .screen-tools {
+      right: max(12px, env(safe-area-inset-right));
+      bottom: max(12px, env(safe-area-inset-bottom));
+    }
+
+    .overlay {
+      padding:
+        max(22px, env(safe-area-inset-top))
+        max(22px, env(safe-area-inset-right))
+        max(22px, env(safe-area-inset-bottom))
+        max(22px, env(safe-area-inset-left));
+    }
+  }
 </style>
 </head>
 <body>
