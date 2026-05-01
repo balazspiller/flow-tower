@@ -1400,6 +1400,30 @@
     }
   }
 
+  function addDebugComboCheat() {
+    if (!DEBUG_CHEATS || state.mode !== 'playing' || state.pause || !state.player) return;
+    const previousCombo = state.combo;
+    state.combo += 5;
+    state.bestCombo = Math.max(state.bestCombo, state.combo);
+    runStatsCurrent.bestCombo = Math.max(runStatsCurrent.bestCombo, state.combo);
+    const overdrive = comboOverdrive();
+    state.comboTimer = COMBO_TIMER_DURATION + (overdrive > 0 ? OVERDRIVE_COMBO_TIMER_BONUS : 0);
+    state.shake = Math.min(.82, .07 + state.combo * .012 + overdrive * .12);
+    audio.land(state.combo);
+
+    const p = state.player;
+    const effectX = p.x + p.w * .5;
+    const effectY = screenY(p.y + p.h * .5);
+    if (state.combo >= FLOW_COMBO_THRESHOLD && previousCombo < FLOW_COMBO_THRESHOLD) {
+      runStatsCurrent.flowStarts += 1;
+      burst(effectX, effectY, 42, 'flow');
+    }
+    if (state.combo >= OVERDRIVE_COMBO_THRESHOLD) {
+      if (previousCombo < OVERDRIVE_COMBO_THRESHOLD) runStatsCurrent.overdriveStarts += 1;
+      burst(effectX, effectY, 4 + Math.floor(overdrive * 50), 'overdrive');
+    }
+  }
+
   function nextPlatformId() {
     let id = 1;
     for (const plat of state.platforms) id = Math.max(id, plat.id + 1);
@@ -2586,6 +2610,7 @@
     if (e.code === 'Space' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') requestJump();
     if (e.code === 'KeyQ' && !e.repeat) toggleDebugSlowTimeCheat();
     if (e.code === 'KeyE' && !e.repeat) activateDebugSpringCheat();
+    if (e.code === 'KeyC' && !e.repeat) addDebugComboCheat();
     if (e.key === 'r' || e.key === 'R') {
       audio.init();
       resetGame();
