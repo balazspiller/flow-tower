@@ -695,7 +695,7 @@
   const rand = (min, max) => min + Math.random() * (max - min);
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
   const lerp = (a, b, t) => a + (b - a) * t;
-  const DEBUG_CHEATS = false;
+  const DEBUG_CHEATS = true;
   const DEBUG_CAMERA_ZOOM_MIN = 1;
   const DEBUG_CAMERA_ZOOM_MAX = 11.5;
   const DEBUG_CAMERA_ZOOM_SPEED = 3.8;
@@ -1192,6 +1192,8 @@
       jumpBuffer: 0,
       facing: 1,
       squash: 0,
+      squashTarget: 0,
+      squashVelocity: 0,
       huePulse: 0,
       idleStartTime: 0,
       idleLook: 0,
@@ -1465,7 +1467,8 @@
     p.grounded = false;
     p.coyote = 0;
     p.jumpBuffer = 0;
-    p.squash = -.48;
+    p.squashTarget = -.48;
+    p.squashVelocity -= 2.25;
     p.flip = 1;
     p.flipSpeed = 2.5;
     p.flipDir = Math.sign(p.vx || p.facing || 1);
@@ -1865,7 +1868,8 @@
       p.grounded = false;
       p.coyote = 0;
       p.jumpBuffer = 0;
-      p.squash = -.35;
+      p.squashTarget = -.3;
+      p.squashVelocity -= 1.9 + speedRatio * .45;
       runStatsCurrent.jumps += 1;
       state.shake = Math.max(state.shake, .04 + speedRatio * .035 + overdrive * .07);
       audio.jump(speedRatio);
@@ -1915,7 +1919,8 @@
           p.vy = 0;
           p.grounded = true;
           p.coyote = .08;
-          p.squash = .34 + hardLanding * .18;
+          p.squashTarget = .24 + hardLanding * .14;
+          p.squashVelocity += .65 + hardLanding * .28;
 
           const center = plat.x + plat.w / 2;
           const landingQuality = 1 - clamp(Math.abs(p.x - center) / (plat.w * .72), 0, 1);
@@ -1987,7 +1992,15 @@
     }
 
     state.flow = lerp(state.flow, state.combo >= FLOW_COMBO_THRESHOLD ? clamp((state.combo - 4) / 8, 0, 1) : 0, 1 - Math.pow(.001, dt));
-    p.squash = lerp(p.squash, 0, 1 - Math.pow(.001, dt));
+    p.squashTarget = lerp(p.squashTarget, 0, 1 - Math.pow(.00015, dt));
+    p.squashVelocity += (p.squashTarget - p.squash) * 265 * dt;
+    p.squashVelocity *= Math.pow(.0015, dt);
+    p.squash = clamp(p.squash + p.squashVelocity * dt, -.5, .42);
+    if (Math.abs(p.squash) < .001 && Math.abs(p.squashTarget) < .001 && Math.abs(p.squashVelocity) < .01) {
+      p.squash = 0;
+      p.squashTarget = 0;
+      p.squashVelocity = 0;
+    }
     p.huePulse = lerp(p.huePulse, clamp(state.flow + overdrive * .9, 0, 1.7), .08);
     if (p.flip > 0) {
       p.flip = Math.max(0, p.flip - dt * p.flipSpeed);
