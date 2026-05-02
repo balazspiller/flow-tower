@@ -607,6 +607,14 @@
               <input class="toggle-input" id="particlesToggle" type="checkbox">
               <span class="toggle-control" aria-hidden="true"></span>
             </label>
+            <label class="setting-row">
+              <span>
+                <span class="setting-label">Sound</span>
+                <span class="setting-description">Jump, landing, powerup, and run-ending effects.</span>
+              </span>
+              <input class="toggle-input" id="soundToggle" type="checkbox">
+              <span class="toggle-control" aria-hidden="true"></span>
+            </label>
           </div>
         </section>
       </div>
@@ -644,6 +652,7 @@
   const speedLinesToggle = document.getElementById('speedLinesToggle');
   const cameraShakeToggle = document.getElementById('cameraShakeToggle');
   const particlesToggle = document.getElementById('particlesToggle');
+  const soundToggle = document.getElementById('soundToggle');
   const statsHighlights = document.getElementById('statsHighlights');
   const powerupStats = document.getElementById('powerupStats');
   const recordStats = document.getElementById('recordStats');
@@ -721,7 +730,8 @@
   const DEFAULT_SETTINGS = {
     speedLines: true,
     cameraShake: true,
-    particles: true
+    particles: true,
+    sound: true
   };
   const POWERUP_LABELS = {
     slow: 'Hourglasses',
@@ -736,7 +746,8 @@
       return {
         speedLines: value.speedLines !== false,
         cameraShake: value.cameraShake !== false,
-        particles: value.particles !== false
+        particles: value.particles !== false,
+        sound: value.sound !== false
       };
     } catch (_) {
       return { ...DEFAULT_SETTINGS };
@@ -755,6 +766,7 @@
     speedLinesToggle.checked = settings.speedLines;
     cameraShakeToggle.checked = settings.cameraShake;
     particlesToggle.checked = settings.particles;
+    soundToggle.checked = settings.sound;
   }
 
   function makeEmptyStats() {
@@ -871,7 +883,7 @@
       }
     },
     tone(freq, duration = .06, type = 'sine', gain = .045) {
-      if (!this.enabled || !this.ctx) return;
+      if (!settings.sound || !this.enabled || !this.ctx) return;
       const t = this.ctx.currentTime;
       const slowActive = state.slowTime > 0;
       const soundFreq = slowActive ? freq * .54 : freq;
@@ -2773,6 +2785,7 @@
   speedLinesToggle.addEventListener('change', () => updateVisualSetting('speedLines', speedLinesToggle.checked));
   cameraShakeToggle.addEventListener('change', () => updateVisualSetting('cameraShake', cameraShakeToggle.checked));
   particlesToggle.addEventListener('change', () => updateVisualSetting('particles', particlesToggle.checked));
+  soundToggle.addEventListener('change', () => updateVisualSetting('sound', soundToggle.checked));
   helpModal.addEventListener('click', (e) => {
     if (e.target === helpModal) closeHelp();
   });
