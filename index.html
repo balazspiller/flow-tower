@@ -626,6 +626,29 @@
   'use strict';
 
   const canvas = document.getElementById('game');
+  const BASE_CANVAS_WIDTH = 480;
+  const DESKTOP_CANVAS_HEIGHT = 720;
+  const MOBILE_CANVAS_RATIO_FALLBACK = 6 / 13;
+  const MOBILE_CANVAS_RATIO_MIN = .44;
+  const MOBILE_CANVAS_RATIO_MAX = .56;
+
+  function configureCanvasSize() {
+    const isPortraitMobile = window.matchMedia('(max-width: 860px) and (orientation: portrait)').matches;
+    canvas.width = BASE_CANVAS_WIDTH;
+
+    if (!isPortraitMobile) {
+      canvas.height = DESKTOP_CANVAS_HEIGHT;
+      return;
+    }
+
+    const viewportWidth = window.visualViewport?.width || document.documentElement.clientWidth || window.innerWidth;
+    const viewportHeight = window.visualViewport?.height || document.documentElement.clientHeight || window.innerHeight;
+    const viewportRatio = viewportWidth && viewportHeight ? viewportWidth / viewportHeight : MOBILE_CANVAS_RATIO_FALLBACK;
+    const mobileRatio = Math.max(MOBILE_CANVAS_RATIO_MIN, Math.min(MOBILE_CANVAS_RATIO_MAX, viewportRatio));
+    canvas.height = Math.round(BASE_CANVAS_WIDTH / mobileRatio);
+  }
+
+  configureCanvasSize();
   const ctx = canvas.getContext('2d');
   const W = canvas.width;
   const H = canvas.height;
