@@ -220,9 +220,11 @@
     line-height: 1;
   }
 
-  #settingsButton {
-    font-size: 25px;
-    padding-bottom: 3px;
+  #settingsButton svg {
+    width: 22px;
+    height: 22px;
+    display: block;
+    stroke: currentColor;
   }
 
   .screen-tool-button[hidden] { display: none; }
@@ -511,7 +513,12 @@
       </div>
       <div class="screen-tools" id="screenTools">
         <button class="screen-tool-button" id="statsButton" type="button" aria-label="Show stats" aria-haspopup="dialog" aria-expanded="false">#</button>
-        <button class="screen-tool-button" id="settingsButton" type="button" aria-label="Show settings" aria-haspopup="dialog" aria-expanded="false">&#9881;</button>
+        <button class="screen-tool-button" id="settingsButton" type="button" aria-label="Show settings" aria-haspopup="dialog" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.6-.22l-2.49 1a7.28 7.28 0 0 0-1.69-.98L14.5 2.42A.5.5 0 0 0 14 2h-4a.5.5 0 0 0-.5.42L9.12 5.07c-.61.24-1.18.57-1.69.98l-2.49-1a.5.5 0 0 0-.6.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65a7.93 7.93 0 0 0 0 1.96l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46a.5.5 0 0 0 .6.22l2.49-1c.51.4 1.08.73 1.69.98l.38 2.65a.5.5 0 0 0 .5.42h4a.5.5 0 0 0 .5-.42l.38-2.65c.61-.24 1.18-.57 1.69-.98l2.49 1a.5.5 0 0 0 .6-.22l2-3.46a.5.5 0 0 0-.12-.64l-2.11-1.65Z" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
         <button class="screen-tool-button" id="helpButton" type="button" aria-label="Show controls and help" aria-haspopup="dialog" aria-expanded="false">?</button>
       </div>
 
