@@ -661,6 +661,7 @@
   const DEBUG_CAMERA_ZOOM_MAX = 11.5;
   const DEBUG_CAMERA_ZOOM_SPEED = 3.8;
   const DEBUG_CAMERA_FOCUS_Y = .56;
+  const DEBUG_CAMERA_ENTER_DURATION = .18;
   const DEBUG_CAMERA_RETURN_DURATION = .22;
   const FLOW_COMBO_THRESHOLD = 5;
   const OVERDRIVE_COMBO_THRESHOLD = 20;
@@ -941,6 +942,7 @@
     debugSlowTime: false,
     debugCamera: false,
     debugCameraZoom: DEBUG_CAMERA_ZOOM_MIN,
+    debugCameraEnterTime: 0,
     debugCameraReturnTime: 0,
     debugCameraReturnZoom: DEBUG_CAMERA_ZOOM_MIN,
     slowPulse: 0,
@@ -1262,6 +1264,7 @@
     state.debugSlowTime = false;
     state.debugCamera = false;
     state.debugCameraZoom = DEBUG_CAMERA_ZOOM_MIN;
+    state.debugCameraEnterTime = 0;
     state.debugCameraReturnTime = 0;
     state.debugCameraReturnZoom = DEBUG_CAMERA_ZOOM_MIN;
     state.slowPulse = 0;
@@ -1476,9 +1479,11 @@
   function setDebugCameraCheat(enabled) {
     if (!DEBUG_CHEATS || state.mode !== 'playing' || state.pause || !state.player) return;
     if (!enabled && state.debugCamera) {
+      state.debugCameraEnterTime = 0;
       state.debugCameraReturnTime = DEBUG_CAMERA_RETURN_DURATION;
       state.debugCameraReturnZoom = state.debugCameraZoom;
-    } else if (enabled) {
+    } else if (enabled && !state.debugCamera) {
+      state.debugCameraEnterTime = DEBUG_CAMERA_ENTER_DURATION;
       state.debugCameraReturnTime = 0;
       state.debugCameraReturnZoom = state.debugCameraZoom;
     }
@@ -1498,6 +1503,7 @@
   function updateDebugCameraCheat(rawDt) {
     if (!DEBUG_CHEATS || state.mode !== 'playing' || state.pause || !state.player) return;
     if (state.debugCamera) {
+      state.debugCameraEnterTime = Math.max(0, state.debugCameraEnterTime - rawDt);
       const zoomIn = keys.has('KeyM') || keys.has('m') || keys.has('M');
       const zoomOut = keys.has('KeyN') || keys.has('n') || keys.has('N');
       const zoomInput = (zoomIn ? 1 : 0) - (zoomOut ? 1 : 0);
@@ -1710,16 +1716,31 @@
     if (!DEBUG_CHEATS || (!state.debugCamera && state.debugCameraReturnTime <= 0) || !state.player) return;
     const p = state.player;
     const returning = !state.debugCamera;
-    const returnProgress = returning
-      ? 1 - state.debugCameraReturnTime / DEBUG_CAMERA_RETURN_DURATION
-      : 0;
-    const ease = 1 - Math.pow(1 - clamp(returnProgress, 0, 1), 3);
-    const zoom = returning ? lerp(state.debugCameraReturnZoom, DEBUG_CAMERA_ZOOM_MIN, ease) : state.debugCameraZoom;
-    const anchorX = returning ? lerp(W / 2, p.x, ease) : W / 2;
-    const anchorY = returning ? lerp(H * DEBUG_CAMERA_FOCUS_Y, screenY(p.y), ease) : H * DEBUG_CAMERA_FOCUS_Y;
+    const entering = state.debugCamera && state.debugCameraEnterTime > 0;
+    const transitionDuration = returning ? DEBUG_CAMERA_RETURN_DURATION : DEBUG_CAMERA_ENTER_DURATION;
+    const transitionTime = returning ? state.debugCameraReturnTime : state.debugCameraEnterTime;
+    const progress = (returning || entering)
+      ? 1 - transitionTime / transitionDuration
+      : 1;
+    const ease = 1 - Math.pow(1 - clamp(progress, 0, 1), 3);
+    const playerScreenY = screenY(p.y);
+    let zoom = state.debugCameraZoom;
+    let anchorX = W / 2;
+    let anchorY = H * DEBUG_CAMERA_FOCUS_Y;
+
+    if (returning) {
+      zoom = lerp(state.debugCameraReturnZoom, DEBUG_CAMERA_ZOOM_MIN, ease);
+      anchorX = lerp(W / 2, p.x, ease);
+      anchorY = lerp(H * DEBUG_CAMERA_FOCUS_Y, playerScreenY, ease);
+    } else if (entering) {
+      zoom = lerp(DEBUG_CAMERA_ZOOM_MIN, state.debugCameraZoom, ease);
+      anchorX = lerp(p.x, W / 2, ease);
+      anchorY = lerp(playerScreenY, H * DEBUG_CAMERA_FOCUS_Y, ease);
+    }
+
     ctx.translate(anchorX, anchorY);
     ctx.scale(zoom, zoom);
-    ctx.translate(-p.x, -screenY(p.y));
+    ctx.translate(-p.x, -playerScreenY);
   }
 
   function jumpPreviewTarget() {
