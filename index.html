@@ -1238,7 +1238,7 @@
   }
 
   function randomPowerUp(kind, worldY) {
-    if (kind === 'boost' || kind === 'spike' || kind === 'cracked' || kind === 'moving' || kind === 'intermittent') return false;
+    if (kind === 'boost' || kind === 'spike') return false;
     const height = towerHeightAt(worldY);
     if (height < POWERUP_MIN_HEIGHT) return false;
     if (height >= BEACON_POWERUP_MIN_HEIGHT && Math.random() < PLATFORM_POWERUP_CHANCE) return 'platforms';
