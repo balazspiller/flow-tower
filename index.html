@@ -554,8 +554,8 @@
           <li>Landing on higher platforms quickly keeps the combo alive.</li>
           <li>Every 1000 height starts a new tower level: the platform tint changes, spacing relaxes, and the climb ramps up again.</li>
           <li>At combo x5+, the tower enters flow: trails, speed lines, stronger sound, and extra jump assist. At x20+, jumps get extra hang time and overdrive effects.</li>
-          <li>Rare blue hourglasses slow time, yellow springs launch you upward, and violet beacons pop extra platforms into the tower.</li>
-          <li>Above height 500, cracked platforms crumble shortly after landing. Above height 750, rare spiky ledges can be passed through from below but end the run if you drop onto them. Above height 1000, moving platforms sweep between the tower walls. Above height 1500, blinking platforms phase in and out.</li>
+          <li>The tower hides rare power-ups that can bend the climb in your favor.</li>
+          <li>Higher sections introduce more dangerous platform behavior and hazards.</li>
           <li>Perfect-ish landings preserve momentum better than hard landings.</li>
         </ul>
         </section>
@@ -719,6 +719,10 @@
   const SPRING_POWERUP_CHANCE = .018;
   const PLATFORM_POWERUP_CHANCE = .011;
   const POWERUP_PLATFORM_COOLDOWN = 10;
+  const POWERUP_MIN_HEIGHT = 200;
+  const SPRING_POWERUP_MIN_HEIGHT = 200;
+  const SLOW_POWERUP_MIN_HEIGHT = 400;
+  const BEACON_POWERUP_MIN_HEIGHT = 600;
   const EXTRA_PLATFORM_COUNT = 3;
   const EXTRA_PLATFORM_RANGE = H * 1.5;
   const EXTRA_PLATFORM_MIN_VERTICAL_GAP = 96;
@@ -739,20 +743,20 @@
   const LEVEL_PROGRESS_DIFFICULTY = .45;
   const LEVEL_HAZARD_PRESSURE_STEP = .085;
   const LEVEL_HAZARD_PRESSURE_MAX = .55;
-  const SPIKE_HEIGHT_THRESHOLD = 750;
+  const SPIKE_HEIGHT_THRESHOLD = 1600;
   const SPIKE_PLATFORM_CHANCE = .035;
   const SPIKE_PLATFORM_COOLDOWN = 18;
-  const CRACKED_HEIGHT_THRESHOLD = 500;
+  const CRACKED_HEIGHT_THRESHOLD = 800;
   const CRACKED_PLATFORM_CHANCE = .105;
   const CRACKED_PLATFORM_COOLDOWN = 6;
   const CRACKED_PLATFORM_BREAK_DELAY = .28;
-  const MOVING_HEIGHT_THRESHOLD = 1000;
+  const MOVING_HEIGHT_THRESHOLD = 400;
   const MOVING_PLATFORM_CHANCE = .06;
   const MOVING_PLATFORM_COOLDOWN = 7;
   const MOVING_PLATFORM_EDGE_MARGIN = WALL_WIDTH + 16;
   const MOVING_PLATFORM_SPEED_MIN = 58;
   const MOVING_PLATFORM_SPEED_MAX = 128;
-  const INTERMITTENT_HEIGHT_THRESHOLD = 1500;
+  const INTERMITTENT_HEIGHT_THRESHOLD = 1200;
   const INTERMITTENT_PLATFORM_CHANCE = .075;
   const INTERMITTENT_PLATFORM_COOLDOWN = 7;
   const INTERMITTENT_PLATFORM_SOLID_DURATION = 1.25;
@@ -1233,21 +1237,23 @@
     };
   }
 
-  function randomPowerUp(kind) {
+  function randomPowerUp(kind, worldY) {
     if (kind === 'boost' || kind === 'spike' || kind === 'cracked' || kind === 'moving' || kind === 'intermittent') return false;
-    if (Math.random() < PLATFORM_POWERUP_CHANCE) return 'platforms';
-    if (Math.random() < SPRING_POWERUP_CHANCE) return 'spring';
-    if (Math.random() < POWERUP_CHANCE) return 'slow';
+    const height = towerHeightAt(worldY);
+    if (height < POWERUP_MIN_HEIGHT) return false;
+    if (height >= BEACON_POWERUP_MIN_HEIGHT && Math.random() < PLATFORM_POWERUP_CHANCE) return 'platforms';
+    if (height >= SPRING_POWERUP_MIN_HEIGHT && Math.random() < SPRING_POWERUP_CHANCE) return 'spring';
+    if (height >= SLOW_POWERUP_MIN_HEIGHT && Math.random() < POWERUP_CHANCE) return 'slow';
     return false;
   }
 
-  function nextPowerUp(kind) {
+  function nextPowerUp(kind, worldY) {
     if (state.powerUpCooldown > 0) {
       state.powerUpCooldown -= 1;
       return false;
     }
 
-    const powerUp = randomPowerUp(kind);
+    const powerUp = randomPowerUp(kind, worldY);
     if (powerUp) state.powerUpCooldown = POWERUP_PLATFORM_COOLDOWN;
     return powerUp;
   }
@@ -1380,7 +1386,7 @@
       const margin = 26;
       const x = side % 3 === 0 ? rand(margin, W * .35) : side % 3 === 1 ? rand(W * .45, W - pw - margin) : rand(margin, W - pw - margin);
       const kind = Math.random() < .08 ? 'boost' : 'normal';
-      const powerUp = nextPowerUp(kind);
+      const powerUp = nextPowerUp(kind, y);
       state.platforms.push(platform(id++, x, y, pw, kind, powerUp));
       y -= rand(58 + difficulty * 12, 94 + difficulty * 22);
       id = addMilestonesDownTo(id, y);
@@ -1454,7 +1460,7 @@
         }
       }
 
-      const powerUp = nextPowerUp(kind);
+      const powerUp = nextPowerUp(kind, y);
       const plat = platform(id++, x, y, kind === 'thin' ? pw * .7 : pw, kind, powerUp);
       state.platforms.push(kind === 'moving' ? prepareMovingPlatform(plat, difficulty) : kind === 'intermittent' ? prepareIntermittentPlatform(plat) : plat);
       if (previous) id = maybeAddSpikePlatform(id, previous.y, y);
