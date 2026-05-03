@@ -555,7 +555,7 @@
           <li>Every 1000 height starts a new tower level: the platform tint changes, spacing relaxes, and the climb ramps up again.</li>
           <li>At combo x5+, the tower enters flow: trails, speed lines, stronger sound, and extra jump assist. At x20+, jumps get extra hang time and overdrive effects.</li>
           <li>Rare blue hourglasses slow time, yellow springs launch you upward, and violet beacons pop extra platforms into the tower.</li>
-          <li>Above height 500, cracked platforms crumble shortly after landing. Above height 750, rare spiky ledges can be passed through from below but end the run if you drop onto them. Above height 1000, moving platforms sweep between the tower walls.</li>
+          <li>Above height 500, cracked platforms crumble shortly after landing. Above height 750, rare spiky ledges can be passed through from below but end the run if you drop onto them. Above height 1000, moving platforms sweep between the tower walls. Above height 1500, blinking platforms phase in and out.</li>
           <li>Perfect-ish landings preserve momentum better than hard landings.</li>
         </ul>
         </section>
@@ -752,12 +752,18 @@
   const MOVING_PLATFORM_EDGE_MARGIN = WALL_WIDTH + 16;
   const MOVING_PLATFORM_SPEED_MIN = 58;
   const MOVING_PLATFORM_SPEED_MAX = 128;
+  const INTERMITTENT_HEIGHT_THRESHOLD = 1500;
+  const INTERMITTENT_PLATFORM_CHANCE = .075;
+  const INTERMITTENT_PLATFORM_COOLDOWN = 7;
+  const INTERMITTENT_PLATFORM_SOLID_DURATION = 1.25;
+  const INTERMITTENT_PLATFORM_GHOST_DURATION = 1.05;
+  const INTERMITTENT_PLATFORM_FADE_DURATION = .11;
   const MOVE_ONLY_ZONE_RATIO = .75;
   const SWIPE_UP_JUMP_RATIO = .08;
   const SWIPE_UP_JUMP_MIN = 34;
   const TOUCH_DIR_HOLD = .14;
-  const STATS_STORAGE_KEY = 'flowTower.stats.v1';
-  const SETTINGS_STORAGE_KEY = 'flowTower.settings.v1';
+  const STATS_STORAGE_KEY = 'spicyTower.stats.v1';
+  const SETTINGS_STORAGE_KEY = 'spicyTower.settings.v1';
   const DEFAULT_SETTINGS = {
     speedLines: true,
     cameraShake: true,
@@ -995,6 +1001,7 @@
     spikePlatformCooldown: 0,
     crackedPlatformCooldown: 0,
     movingPlatformCooldown: 0,
+    intermittentPlatformCooldown: 0,
     fireworkMilestone: 0,
     platformCursorY: 0,
     nextMilestoneHeight: MILESTONE_HEIGHT_STEP,
@@ -1218,6 +1225,7 @@
       hidden: false,
       revealDelay: 0,
       crumbleTimer: 0,
+      phaseOffset: 0,
       moveMinX: 0,
       moveMaxX: W - w,
       moveSpeed: 0,
@@ -1226,7 +1234,7 @@
   }
 
   function randomPowerUp(kind) {
-    if (kind === 'boost' || kind === 'spike' || kind === 'cracked' || kind === 'moving') return false;
+    if (kind === 'boost' || kind === 'spike' || kind === 'cracked' || kind === 'moving' || kind === 'intermittent') return false;
     if (Math.random() < PLATFORM_POWERUP_CHANCE) return 'platforms';
     if (Math.random() < SPRING_POWERUP_CHANCE) return 'spring';
     if (Math.random() < POWERUP_CHANCE) return 'slow';
@@ -1259,6 +1267,38 @@
     plat.moveSpeed = rand(MOVING_PLATFORM_SPEED_MIN + difficulty * 12, MOVING_PLATFORM_SPEED_MAX + difficulty * 34);
     plat.moveDir = Math.random() < .5 ? -1 : 1;
     return plat;
+  }
+
+  function prepareIntermittentPlatform(plat) {
+    plat.phaseOffset = rand(0, INTERMITTENT_PLATFORM_SOLID_DURATION + INTERMITTENT_PLATFORM_GHOST_DURATION);
+    return plat;
+  }
+
+  function intermittentPlatformPhase(plat) {
+    const solidDuration = INTERMITTENT_PLATFORM_SOLID_DURATION;
+    const ghostDuration = INTERMITTENT_PLATFORM_GHOST_DURATION;
+    const cycle = solidDuration + ghostDuration;
+    const t = (state.time + plat.phaseOffset) % cycle;
+    const solid = t < solidDuration;
+    const remaining = solid ? solidDuration - t : cycle - t;
+    const duration = solid ? solidDuration : ghostDuration;
+    let alpha = solid ? 1 : .26;
+    if (solid && remaining < INTERMITTENT_PLATFORM_FADE_DURATION) {
+      alpha = lerp(.42, 1, remaining / INTERMITTENT_PLATFORM_FADE_DURATION);
+    } else if (!solid && remaining < INTERMITTENT_PLATFORM_FADE_DURATION) {
+      alpha = lerp(1, .26, remaining / INTERMITTENT_PLATFORM_FADE_DURATION);
+    }
+    return {
+      solid,
+      remaining,
+      duration,
+      progress: clamp(remaining / duration, 0, 1),
+      alpha
+    };
+  }
+
+  function isIntermittentPlatformSolid(plat) {
+    return plat.kind !== 'intermittent' || intermittentPlatformPhase(plat).solid;
   }
 
   function maybeAddSpikePlatform(id, lowerY, upperY) {
@@ -1319,6 +1359,7 @@
     state.spikePlatformCooldown = 0;
     state.crackedPlatformCooldown = 0;
     state.movingPlatformCooldown = 0;
+    state.intermittentPlatformCooldown = 0;
     state.fireworkMilestone = 0;
     state.platforms = [];
     state.nextMilestoneHeight = MILESTONE_HEIGHT_STEP;
@@ -1401,10 +1442,21 @@
           }
         }
       }
+      if (towerHeight >= INTERMITTENT_HEIGHT_THRESHOLD && kind === 'normal') {
+        if (state.intermittentPlatformCooldown > 0) {
+          state.intermittentPlatformCooldown -= 1;
+        } else {
+          const hazardPressure = hazardPressureAt(y);
+          if (Math.random() < INTERMITTENT_PLATFORM_CHANCE + difficulty * .035 + hazardPressure * .075) {
+            kind = 'intermittent';
+            state.intermittentPlatformCooldown = Math.max(3, Math.round(INTERMITTENT_PLATFORM_COOLDOWN - hazardPressure * 4));
+          }
+        }
+      }
 
       const powerUp = nextPowerUp(kind);
       const plat = platform(id++, x, y, kind === 'thin' ? pw * .7 : pw, kind, powerUp);
-      state.platforms.push(kind === 'moving' ? prepareMovingPlatform(plat, difficulty) : plat);
+      state.platforms.push(kind === 'moving' ? prepareMovingPlatform(plat, difficulty) : kind === 'intermittent' ? prepareIntermittentPlatform(plat) : plat);
       if (previous) id = maybeAddSpikePlatform(id, previous.y, y);
       y -= gap;
       id = addMilestonesDownTo(id, y);
@@ -1809,6 +1861,7 @@
       if (plat.hidden) continue;
       if (plat.id === p.lastPlatformId || plat.kind === 'start') continue;
       if (plat.kind === 'spike') continue;
+      if (!isIntermittentPlatformSolid(plat)) continue;
       if (plat.y < peakY || plat.y >= p.y - 8) continue;
 
       const dy = plat.y - peakY;
@@ -1902,6 +1955,7 @@
     if (p.vy >= 0) {
       for (const plat of state.platforms) {
         if (plat.hidden) continue;
+        if (!isIntermittentPlatformSolid(plat)) continue;
         const contactY = plat.kind === 'spike' ? plat.y - 16 : plat.y;
         const wasAbove = oldY + p.h / 2 <= contactY + 4;
         const nowBelow = p.y + p.h / 2 >= contactY;
@@ -2085,6 +2139,10 @@
 
   function updatePlatforms(dt) {
     for (const plat of state.platforms) {
+      if (plat.kind === 'intermittent' && !isIntermittentPlatformSolid(plat) && state.player.grounded && state.player.lastPlatformId === plat.id) {
+        state.player.grounded = false;
+        state.player.coyote = .03;
+      }
       if (plat.kind === 'moving') {
         const oldX = plat.x;
         plat.x += plat.moveDir * plat.moveSpeed * dt;
@@ -2263,7 +2321,9 @@
       const isExtra = plat.kind === 'extra';
       const isCracked = plat.kind === 'cracked';
       const isMoving = plat.kind === 'moving';
-      const landed = plat.touched && !isBoost && !isStart && !isMilestone && !isSpike && !isExtra && !isCracked && !isMoving;
+      const isIntermittent = plat.kind === 'intermittent';
+      const intermittentPhase = isIntermittent ? intermittentPlatformPhase(plat) : null;
+      const landed = plat.touched && !isBoost && !isStart && !isMilestone && !isSpike && !isExtra && !isCracked && !isMoving && !isIntermittent;
       const popT = plat.pop > 0 ? 1 - plat.pop / .32 : 1;
       const popScale = plat.pop > 0 ? .55 + Math.sin(popT * Math.PI * .5) * .45 : 1;
       const crumbleProgress = isCracked && plat.crumbleTimer > 0 ? 1 - plat.crumbleTimer / CRACKED_PLATFORM_BREAK_DELAY : 0;
@@ -2278,7 +2338,7 @@
         ctx.shadowColor = isMilestone ? isLevelMarker ? levelShadow : 'rgba(255,224,138,.36)' : isBoost ? 'rgba(255,224,138,.8)' : isSpike ? 'rgba(255,78,94,.55)' : isExtra ? 'rgba(195,150,255,.6)' : isCracked ? levelColorAt(plat.y, .32, -4) : levelShadow;
         ctx.shadowBlur = isMilestone ? isLevelMarker ? 20 : 14 : isBoost ? 18 : isSpike ? 12 : isExtra ? 16 : isCracked ? 8 : 10;
       }
-      ctx.globalAlpha = (plat.pop > 0 ? .62 + popT * .38 : 1) * (isCracked && plat.crumbleTimer > 0 ? 1 - crumbleProgress * .45 : 1);
+      ctx.globalAlpha = (plat.pop > 0 ? .62 + popT * .38 : 1) * (isCracked && plat.crumbleTimer > 0 ? 1 - crumbleProgress * .45 : 1) * (isIntermittent ? intermittentPhase.alpha : 1);
       ctx.translate(x + plat.w / 2, y + plat.h / 2);
       if (isCracked && plat.crumbleTimer > 0) ctx.translate(rand(-1, 1) * crumbleProgress * 2.2, rand(-1, 1) * crumbleProgress * 1.4);
       ctx.scale(popScale, popScale);
@@ -2320,6 +2380,30 @@
             ctx.lineTo(arrowX - 5 * plat.moveDir, arrowY + 4);
             ctx.stroke();
           }
+        }
+
+        if (isIntermittent) {
+          const dotOrder = [2, 1, 3, 0, 4];
+          const dotCount = dotOrder.length;
+          const dotGap = 11;
+          const dotRadius = 3.4;
+          const centerX = x + plat.w / 2;
+          const dotY = y + plat.h + 8;
+          const charge = 1 - intermittentPhase.progress;
+          const litDots = charge < .25 ? 0 : charge < .5 ? 1 : charge < .75 ? 3 : dotCount;
+          ctx.save();
+          ctx.globalAlpha = 1;
+          ctx.shadowColor = 'rgba(255,255,255,.38)';
+          ctx.shadowBlur = intermittentPhase.solid ? 3 : 7;
+          for (let i = 0; i < dotCount; i++) {
+            const active = dotOrder.indexOf(i) < litDots;
+            const dotX = centerX + (i - 2) * dotGap;
+            ctx.fillStyle = active ? 'rgba(255,255,255,.92)' : 'rgba(255,255,255,.23)';
+            ctx.beginPath();
+            ctx.arc(dotX, dotY, active ? dotRadius : dotRadius * .82, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
         }
 
         if (isCracked) {
