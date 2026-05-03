@@ -308,6 +308,119 @@
   .tips { margin: 0; padding-left: 18px; }
   .tips li { margin: 7px 0; }
 
+  .mobile-controls-guide {
+    display: none;
+  }
+
+  .touch-map {
+    margin-top: 12px;
+    display: grid;
+    grid-template-rows: 3fr 1fr;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.14);
+    border-radius: 16px;
+    background: rgba(255,255,255,.05);
+    height: clamp(300px, 46dvh, 390px);
+    color: var(--text);
+  }
+
+  .touch-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .touch-row + .touch-row {
+    border-top: 1px solid rgba(255,255,255,.16);
+  }
+
+  .touch-zone {
+    position: relative;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 7px;
+    min-width: 0;
+    padding: 13px 10px;
+    text-align: center;
+    border-left: 1px solid rgba(255,255,255,.12);
+  }
+
+  .touch-zone:first-child {
+    border-left: 0;
+  }
+
+  .touch-zone.upper {
+    background: linear-gradient(180deg, rgba(138,232,255,.16), rgba(138,232,255,.07));
+  }
+
+  .touch-zone.lower {
+    background: linear-gradient(180deg, rgba(255,224,138,.1), rgba(255,224,138,.2));
+    gap: 4px;
+    padding: 8px 6px;
+  }
+
+  .touch-zone-title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .touch-actions {
+    display: grid;
+    gap: 5px;
+    max-width: 10rem;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .touch-action strong {
+    color: var(--text);
+    font-weight: 800;
+  }
+
+  .touch-arrow {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: rgba(255,255,255,.12);
+    color: var(--text);
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .touch-arrow.left {
+    transform: rotate(180deg);
+  }
+
+  .touch-swipe {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--accent);
+    font-weight: 800;
+  }
+
+  .touch-zone.lower .touch-arrow {
+    width: 24px;
+    height: 24px;
+    font-size: 14px;
+  }
+
+  .touch-zone.lower .touch-zone-title {
+    font-size: 10px;
+  }
+
+  .touch-zone.lower .touch-actions {
+    gap: 3px;
+    font-size: 11px;
+    line-height: 1.15;
+  }
+
   .stats-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -451,6 +564,7 @@
       height: 42px;
     }
     .overlay { padding: 22px; }
+    .mobile-controls-guide { display: block; }
   }
 
   @media (max-width: 860px) and (orientation: portrait) {
@@ -545,6 +659,46 @@
         <section class="modal-section">
         <h2 id="helpTitle">Controls</h2>
         <p><kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> move · <kbd>Space</kbd>/<kbd>↑</kbd> jump · tap upper left/right to jump that way, swipe up while holding to jump again · hold lower left/right to move, swipe up to jump · <kbd>R</kbd> restart · <kbd>P</kbd> pause</p>
+        <div class="mobile-controls-guide" aria-label="Mobile touch control zones">
+          <div class="touch-map">
+            <div class="touch-row">
+              <div class="touch-zone upper">
+                <div class="touch-arrow left">➜</div>
+                <div class="touch-zone-title">Upper left</div>
+                <div class="touch-actions">
+                  <div class="touch-action"><strong>Tap/hold</strong>: jump + left</div>
+                  <div class="touch-action"><span class="touch-swipe">↑ swipe</span>: jump again</div>
+                </div>
+              </div>
+              <div class="touch-zone upper">
+                <div class="touch-arrow">➜</div>
+                <div class="touch-zone-title">Upper right</div>
+                <div class="touch-actions">
+                  <div class="touch-action"><strong>Tap/hold</strong>: jump + right</div>
+                  <div class="touch-action"><span class="touch-swipe">↑ swipe</span>: jump again</div>
+                </div>
+              </div>
+            </div>
+            <div class="touch-row">
+              <div class="touch-zone lower">
+                <div class="touch-arrow left">➜</div>
+                <div class="touch-zone-title">Lower left</div>
+                <div class="touch-actions">
+                  <div class="touch-action"><strong>Tap/hold</strong>: move left</div>
+                  <div class="touch-action"><span class="touch-swipe">↑ swipe</span>: jump</div>
+                </div>
+              </div>
+              <div class="touch-zone lower">
+                <div class="touch-arrow">➜</div>
+                <div class="touch-zone-title">Lower right</div>
+                <div class="touch-actions">
+                  <div class="touch-action"><strong>Tap/hold</strong>: move right</div>
+                  <div class="touch-action"><span class="touch-swipe">↑ swipe</span>: jump</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         </section>
         <section class="modal-section">
         <h2>Flow system</h2>
@@ -552,8 +706,6 @@
           <li>Horizontal speed increases jump power and lets you skip floors.</li>
           <li>The tower has side walls. Hold the opposite direction as you hit one to rebound back into the climb.</li>
           <li>Landing on higher platforms quickly keeps the combo alive.</li>
-          <li>Every 1000 height starts a new tower level: the platform tint changes, spacing relaxes, and the climb ramps up again.</li>
-          <li>At combo x5+, the tower enters flow: trails, speed lines, stronger sound, and extra jump assist. At x20+, jumps get extra hang time and overdrive effects.</li>
           <li>The tower hides rare power-ups that can bend the climb in your favor.</li>
           <li>Higher sections introduce more dangerous platform behavior and hazards.</li>
           <li>Perfect-ish landings preserve momentum better than hard landings.</li>
