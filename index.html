@@ -544,7 +544,7 @@
         <button class="modal-close" id="helpCloseButton" type="button" aria-label="Close controls and help">&times;</button>
         <section class="modal-section">
         <h2 id="helpTitle">Controls</h2>
-        <p><kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> move · <kbd>Space</kbd>/<kbd>↑</kbd> jump · tap upper left/right to jump that way · hold lower left/right to move, swipe up to jump · <kbd>R</kbd> restart · <kbd>P</kbd> pause</p>
+        <p><kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> move · <kbd>Space</kbd>/<kbd>↑</kbd> jump · tap upper left/right to jump that way, swipe up while holding to jump again · hold lower left/right to move, swipe up to jump · <kbd>R</kbd> restart · <kbd>P</kbd> pause</p>
         </section>
         <section class="modal-section">
         <h2>Flow system</h2>
@@ -2946,7 +2946,7 @@
     touchInput.holdDir = 0;
     touchInput.holdTimer = 0;
     touchInput.startY = y;
-    touchInput.swipeJumped = !isMoveOnlyTap;
+    touchInput.swipeJumped = false;
     if (!isMoveOnlyTap) requestJump();
   });
   canvas.addEventListener('pointermove', (e) => {
