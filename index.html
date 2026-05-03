@@ -714,6 +714,7 @@
   const OVERDRIVE_SLOW_TIME_DURATION = 7.5;
   const SLOW_TIME_SCALE = .46;
   const OVERDRIVE_TIME_SCALE = 1;
+  const SPEED_LINE_TARGET_Y_OFFSET = 44;
   const POWERUP_CHANCE = .035;
   const SPRING_POWERUP_CHANCE = .018;
   const PLATFORM_POWERUP_CHANCE = .011;
@@ -2220,7 +2221,7 @@
     const speed = Math.abs(p.vx);
     const overdrive = comboOverdrive();
     const preview = jumpPreviewTarget();
-    const targetY = preview ? screenY(preview.targetY) : null;
+    const targetY = preview ? screenY(preview.targetY) + SPEED_LINE_TARGET_Y_OFFSET : null;
     const targetVisible = targetY !== null && targetY > -80 && targetY < H + 80;
     const direction = Math.sign(p.vx || 1);
     const baseAlpha = Math.max((state.flow + overdrive * .38) * clamp(speed / 280, .2, 1), state.slowPulse * .34);
